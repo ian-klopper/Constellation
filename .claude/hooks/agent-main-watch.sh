@@ -25,6 +25,11 @@ done
 
 last_count=0
 
+# Status is owned by the explicit hooks (agent-touch.sh sets "active" on
+# PreToolUse, agent-idle.sh sets "idle" on Stop). The watcher only fills in
+# narrative fields and bumps lastActiveAt — it must NOT touch status, or it
+# will race against agent-idle.sh after Stop and re-flip the icon to active.
+
 write_message() {
   local msg="$1"
   [ -z "$msg" ] && return 0
@@ -33,7 +38,7 @@ write_message() {
   now=$(date +%s)
   tmp="${target}.tmp.$$"
   if jq --arg msg "$msg" --argjson ts "$now" \
-       '. + {status: "active", currentMessage: $msg, lastActiveAt: $ts}' \
+       '. + {currentMessage: $msg, lastActiveAt: $ts}' \
        < "$target" > "$tmp" 2>/dev/null; then
     if [ -f "$target" ]; then
       mv "$tmp" "$target"
@@ -53,7 +58,7 @@ write_activity() {
   now=$(date +%s)
   tmp="${target}.tmp.$$"
   if jq --arg activity "$activity" --argjson ts "$now" \
-       '. + {status: "active", currentActivity: $activity, lastActiveAt: $ts}' \
+       '. + {currentActivity: $activity, lastActiveAt: $ts}' \
        < "$target" > "$tmp" 2>/dev/null; then
     if [ -f "$target" ]; then
       mv "$tmp" "$target"

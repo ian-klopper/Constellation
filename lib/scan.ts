@@ -1,8 +1,9 @@
 /**
- * Walks the project from the repo root and builds the directory/file tree the
- * visualizer renders. Uses ts-morph to count lines, list exported symbols,
- * parse the leading JSDoc header as a description, and resolve which other
- * project files each file imports (and is imported by).
+ * Reads every TypeScript file in the project and figures out, for each one:
+ * its name, how big it is, the things it shares with the rest of the app,
+ * what it tells you about itself in its comment header, and which other
+ * files it pulls from or is pulled by. The visualizer turns this list into
+ * the map you see on the screen.
  */
 import "server-only";
 import path from "node:path";

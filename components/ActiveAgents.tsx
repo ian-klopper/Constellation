@@ -1,7 +1,7 @@
 /**
- * Top-of-page badge bar listing every currently-running Claude Code agent —
- * the main agent, foreground subagents, and background subagents — with a
- * one-line description. Polls /api/agents once a second.
+ * The strip across the top of the page that names every Claude agent
+ * working on the project right now and what each one is up to. Refreshes
+ * once a second.
  */
 "use client";
 

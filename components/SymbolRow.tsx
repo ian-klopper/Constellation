@@ -1,7 +1,7 @@
 /**
- * One row in the hover panel's "Exports" list: a Glyph for the symbol kind
- * plus the symbol name. Kept generic so other surfaces (debug views, future
- * sidebars) can reuse it.
+ * One line in the hover card's "Exports" list — a small shape that hints at
+ * what kind of thing it is (component, hook, type, etc.) followed by the
+ * name.
  */
 import { Glyph } from "./Glyph";
 import type { SymbolNode } from "@/lib/types";

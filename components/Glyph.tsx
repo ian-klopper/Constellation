@@ -1,7 +1,8 @@
 /**
- * Tiny SVG icon that gives each SymbolKind a distinct shape (circle for
- * components, diamond for routes, square for hooks/types, etc.). Rendered next
- * to the symbol name in SymbolRow.
+ * The tiny shape next to each name in the hover card — a circle means a
+ * React component, a diamond means a page route, a square means a hook or
+ * type, and so on. Lets you see at a glance what each export is without
+ * having to read the name.
  */
 import type { SymbolKind } from "@/lib/types";
 

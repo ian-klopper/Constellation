@@ -1,7 +1,9 @@
 /**
- * Shared types for the visualizer: the directory/file tree shape returned by
- * the scanner, the SymbolKind discriminator that drives Glyph rendering, and
- * the ActiveAgent record served by /api/agents.
+ * The shared "shapes" the rest of the app passes around — what a file looks
+ * like in the project map, what kinds of things a file can share with other
+ * files (component, hook, type, etc.), and what a running Claude agent looks
+ * like. If you change a shape here, every file that touches that data will
+ * notice.
  */
 export type SymbolKind =
   | "component"

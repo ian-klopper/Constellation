@@ -1,8 +1,7 @@
 /**
- * Floating layer of agent icons that move between file tiles to show what
- * each Claude Code agent is reading or editing right now. Anchors to the
- * data-path attribute on each file tile (set by TreemapNode), parks idle
- * icons in a dock, and polls /api/agents once a second.
+ * The floating Claude badges that sit on top of the map and slide between
+ * files to show you what each AI is reading or editing right now. Idle
+ * agents park in a row at the top of the page. Refreshes once a second.
  */
 "use client";
 

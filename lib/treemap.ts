@@ -1,8 +1,9 @@
 /**
- * Squarified treemap layout (Bruls, Huijsing, van Wijk, 2000). Pure function:
- * takes a list of items pre-sorted by value descending and a bounding rect,
- * returns a rect per item with aspect ratios close to 1:1. The visualizer
- * calls this once per directory to lay out its children.
+ * The math that decides how big each rectangle on the map should be and
+ * where it sits. You hand it a list of sizes and a box to fill, and it
+ * slices the box into smaller boxes whose areas match those sizes — picking
+ * cuts that keep each piece roughly square instead of long and skinny.
+ * Called once per folder.
  */
 
 export type TreemapInput = { value: number };

@@ -1,6 +1,6 @@
 /**
- * Next.js build/runtime config. Empty for now — defaults are fine for this
- * repo. Edit here to turn on experimental flags, redirects, headers, etc.
+ * Next.js settings. Empty for now — the defaults work fine. This is the
+ * place to flip on experimental features or add things like redirects later.
  */
 import type { NextConfig } from "next";
 

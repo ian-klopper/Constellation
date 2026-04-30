@@ -54,4 +54,7 @@ export type ActiveAgent = {
   agentId?: string;
   currentPath?: string;
   kind?: "foreground" | "background";
+  status?: "active" | "idle";
+  currentActivity?: string;
+  currentMessage?: string;
 };

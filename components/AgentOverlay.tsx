@@ -10,7 +10,7 @@
 import { OVERLAY, OVERLAY_TIMING, OVERLAY_MOTION } from "@/lib/constants";
 import { AgentIcon } from "./AgentIcon";
 import { AgentBubble } from "./AgentBubble";
-import { useAgentPolling } from "@/hooks/useAgentPolling";
+import { useAgentStream } from "@/hooks/useAgentStream";
 import {
   useAgentLifecycle,
   type DisplayAgent,
@@ -19,11 +19,11 @@ import { useAgentPositions } from "@/hooks/useAgentPositions";
 import { useIdleClock } from "@/hooks/useIdleClock";
 
 const { ICON_SIZE } = OVERLAY;
-const { POLL_INTERVAL_MS, IDLE_DEBOUNCE_MS, MOUNT_FADE_MS } = OVERLAY_TIMING;
+const { IDLE_DEBOUNCE_MS, MOUNT_FADE_MS } = OVERLAY_TIMING;
 const { TRANSFORM_MS, OPACITY_MS, EASING } = OVERLAY_MOTION;
 
 export function AgentOverlay() {
-  const snapshot = useAgentPolling(POLL_INTERVAL_MS);
+  const snapshot = useAgentStream();
   const agents = useAgentLifecycle(snapshot);
   const positions = useAgentPositions(agents);
   const now = useIdleClock();

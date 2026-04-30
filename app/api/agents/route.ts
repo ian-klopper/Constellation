@@ -1,9 +1,9 @@
 /**
- * Tells the page which Claude agents are working right now. Looks at the
- * little JSON files the hooks leave behind on disk, ignores anything older
- * than 30 minutes, validates each one against the shared zod schema (so a
- * malformed hook write surfaces as a console warning instead of corrupting
- * the UI), and hands back a fresh list every time the page asks.
+ * Tells the page which Claude agents are working right now. Tries the
+ * daemon first (in-memory, always fresh), falls back to reading the
+ * lifecycle JSON files from disk if the daemon is down. Validates each
+ * record against the shared zod schema so a malformed write surfaces
+ * as a console warning instead of corrupting the UI silently.
  */
 import { NextResponse } from "next/server";
 import { promises as fs } from "node:fs";
@@ -15,8 +15,23 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const config = loadConfig();
-  const stateDir = resolveStateDir();
 
+  // Try the daemon first — it's the authoritative source.
+  try {
+    const res = await fetch(
+      `http://127.0.0.1:${config.daemon.port}/agents`,
+      { cache: "no-store", signal: AbortSignal.timeout(500) },
+    );
+    if (res.ok) {
+      const json = (await res.json()) as { agents: ActiveAgent[] };
+      return NextResponse.json({ agents: json.agents });
+    }
+  } catch {
+    // daemon unavailable; fall through to disk
+  }
+
+  // Fallback: read the on-disk lifecycle files.
+  const stateDir = resolveStateDir();
   let entries: string[];
   try {
     entries = await fs.readdir(stateDir);
@@ -36,13 +51,13 @@ export async function GET() {
     try {
       raw = await fs.readFile(path.join(stateDir, name), "utf8");
     } catch {
-      continue; // mid-write or unreadable — pick up on next poll
+      continue;
     }
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
     } catch {
-      continue; // mid-write JSON; silently skip
+      continue;
     }
     const result = ActiveAgentSchema.safeParse(parsed);
     if (!result.success) {

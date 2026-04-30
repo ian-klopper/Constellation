@@ -35,4 +35,5 @@ export type ActiveAgent = {
   lastActiveAt?: number;
   agentId?: string;
   currentPath?: string;
+  kind?: "foreground" | "background";
 };

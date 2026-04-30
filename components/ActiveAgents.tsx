@@ -34,8 +34,17 @@ export function ActiveAgents() {
     <div className="flex flex-wrap gap-2 border-b border-zinc-200 px-6 py-2 text-[11px] text-zinc-700">
       {agents.map((a) => {
         const isMain = a.id === "main";
-        const dot = isMain ? "bg-sky-500" : "bg-emerald-500";
-        const label = isMain ? "claude" : a.subagent_type;
+        const isBg = a.kind === "background";
+        const dot = isMain
+          ? "bg-sky-500"
+          : isBg
+            ? "bg-amber-500"
+            : "bg-emerald-500";
+        const label = isMain
+          ? "claude"
+          : isBg
+            ? `${a.subagent_type} (bg)`
+            : a.subagent_type;
         const detail = isMain ? (a.currentPath ?? "idle") : a.description;
         return (
           <span

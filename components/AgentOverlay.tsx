@@ -72,7 +72,9 @@ export function AgentOverlay() {
               style={{ width: ICON_SIZE, height: ICON_SIZE }}
             >
               <AgentIcon agent={a} />
-              {a.id !== "main" && <AgentBubble agent={a} />}
+              {a.id !== "main" && a.kind !== "background" && (
+                <AgentBubble agent={a} />
+              )}
             </div>
           </div>
         );
@@ -83,14 +85,27 @@ export function AgentOverlay() {
 
 function AgentIcon({ agent }: { agent: ActiveAgent }) {
   const isMain = agent.id === "main";
-  const glyph = isMain ? "●" : (agent.subagent_type || "?").charAt(0).toUpperCase();
+  const isBg = agent.kind === "background";
+  const glyph = isMain
+    ? "●"
+    : (agent.subagent_type || "?").charAt(0).toUpperCase();
   const tooltip = isMain
     ? `Claude · ${agent.currentPath ?? "idle"}`
-    : agent.currentPath
-      ? `${agent.subagent_type} · ${agent.currentPath}`
-      : `${agent.subagent_type} · ${agent.description}`;
-  const bg = isMain ? "bg-sky-500" : "bg-emerald-500";
-  const ping = isMain ? "bg-sky-400" : "bg-emerald-400";
+    : isBg
+      ? `${agent.subagent_type} (background) · ${agent.description}`
+      : agent.currentPath
+        ? `${agent.subagent_type} · ${agent.currentPath}`
+        : `${agent.subagent_type} · ${agent.description}`;
+  const bg = isMain
+    ? "bg-sky-500"
+    : isBg
+      ? "bg-amber-500"
+      : "bg-emerald-500";
+  const ping = isMain
+    ? "bg-sky-400"
+    : isBg
+      ? "bg-amber-400"
+      : "bg-emerald-400";
   return (
     <div
       title={tooltip}

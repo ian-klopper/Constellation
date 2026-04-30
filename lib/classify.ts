@@ -1,3 +1,9 @@
+/**
+ * Maps an exported declaration to a SymbolKind by looking at the file path,
+ * the declaration shape, and naming conventions (e.g. `useFoo` → hook,
+ * PascalCase in a .tsx file → component, GET in app/api/.../route.ts → route).
+ * Used by the scanner to label each export so the visualizer can pick a glyph.
+ */
 import { Node, type SourceFile } from "ts-morph";
 import type { SymbolKind } from "./types";
 

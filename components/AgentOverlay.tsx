@@ -1,3 +1,9 @@
+/**
+ * Floating layer of agent icons that move between file tiles to show what
+ * each Claude Code agent is reading or editing right now. Anchors to the
+ * data-path attribute on each file tile (set by TreemapNode), parks idle
+ * icons in a dock, and polls /api/agents once a second.
+ */
 "use client";
 
 import { useEffect, useLayoutEffect, useState } from "react";

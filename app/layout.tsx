@@ -1,3 +1,7 @@
+/**
+ * Next.js root layout. Loads the IBM Plex Mono font and applies the global
+ * styles in globals.css to every page.
+ */
 import type { Metadata } from "next";
 import { IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";

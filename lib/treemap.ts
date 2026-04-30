@@ -1,6 +1,9 @@
-// Squarified treemap (Bruls, Huijsing, van Wijk, 2000).
-// Items are assumed pre-sorted by `value` descending — that's the precondition
-// for producing tiles with aspect ratios close to 1:1.
+/**
+ * Squarified treemap layout (Bruls, Huijsing, van Wijk, 2000). Pure function:
+ * takes a list of items pre-sorted by value descending and a bounding rect,
+ * returns a rect per item with aspect ratios close to 1:1. The visualizer
+ * calls this once per directory to lay out its children.
+ */
 
 export type TreemapInput = { value: number };
 export type Rect = { x: number; y: number; w: number; h: number };

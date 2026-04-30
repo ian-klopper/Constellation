@@ -1,3 +1,8 @@
+/**
+ * Tiny SVG icon that gives each SymbolKind a distinct shape (circle for
+ * components, diamond for routes, square for hooks/types, etc.). Rendered next
+ * to the symbol name in SymbolRow.
+ */
 import type { SymbolKind } from "@/lib/types";
 
 const SIZE = 12;

@@ -1,3 +1,9 @@
+/**
+ * Returns the live list of currently-running Claude Code agents. Reads the
+ * lifecycle JSON files written by the project's hook scripts under
+ * .constellation/agents/, drops anything older than 30 minutes, and returns
+ * them sorted by start time. Consumed by ActiveAgents and AgentOverlay.
+ */
 import { NextResponse } from "next/server";
 import { promises as fs } from "node:fs";
 import path from "node:path";

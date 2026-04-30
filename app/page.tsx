@@ -1,3 +1,8 @@
+/**
+ * Home page and only route. Scans the project on the server, counts
+ * directories/files/lines for the header strip, and renders the visualizer
+ * along with the live-agent badge bar and overlay.
+ */
 import { scanProject, countTree } from "@/lib/scan";
 import { Visualizer } from "@/components/Visualizer";
 import { ActiveAgents } from "@/components/ActiveAgents";

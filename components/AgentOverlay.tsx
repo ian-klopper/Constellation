@@ -67,7 +67,13 @@ export function AgentOverlay() {
               willChange: "transform",
             }}
           >
-            <AgentIcon agent={a} />
+            <div
+              className="relative"
+              style={{ width: ICON_SIZE, height: ICON_SIZE }}
+            >
+              <AgentIcon agent={a} />
+              {a.id !== "main" && <AgentBubble agent={a} />}
+            </div>
           </div>
         );
       })}
@@ -76,18 +82,57 @@ export function AgentOverlay() {
 }
 
 function AgentIcon({ agent }: { agent: ActiveAgent }) {
-  const letter = (agent.subagent_type || "?").charAt(0).toUpperCase();
-  const tooltip = agent.currentPath
-    ? `${agent.subagent_type} · ${agent.currentPath}`
-    : `${agent.subagent_type} · ${agent.description}`;
+  const isMain = agent.id === "main";
+  const glyph = isMain ? "●" : (agent.subagent_type || "?").charAt(0).toUpperCase();
+  const tooltip = isMain
+    ? `Claude · ${agent.currentPath ?? "idle"}`
+    : agent.currentPath
+      ? `${agent.subagent_type} · ${agent.currentPath}`
+      : `${agent.subagent_type} · ${agent.description}`;
+  const bg = isMain ? "bg-sky-500" : "bg-emerald-500";
+  const ping = isMain ? "bg-sky-400" : "bg-emerald-400";
   return (
     <div
       title={tooltip}
-      className="pointer-events-auto relative flex items-center justify-center rounded-full bg-emerald-500 text-[12px] font-semibold text-white shadow-lg ring-2 ring-white"
-      style={{ width: ICON_SIZE, height: ICON_SIZE }}
+      className={`pointer-events-auto absolute inset-0 flex items-center justify-center rounded-full ${bg} text-[12px] font-semibold text-white shadow-lg ring-2 ring-white`}
     >
-      {letter}
-      <span className="absolute inset-0 -z-10 animate-ping rounded-full bg-emerald-400 opacity-60" />
+      {glyph}
+      <span className={`absolute inset-0 -z-10 animate-ping rounded-full ${ping} opacity-60`} />
+    </div>
+  );
+}
+
+function AgentBubble({ agent }: { agent: ActiveAgent }) {
+  const text = agent.description?.trim() || agent.subagent_type;
+  if (!text) return null;
+  return (
+    <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2">
+      <div className="relative whitespace-nowrap rounded-sm border border-zinc-300 bg-white px-2 py-1 text-[11px] leading-none text-zinc-800 shadow-sm">
+        <span className="block max-w-[24ch] truncate">{text}</span>
+        <span
+          aria-hidden
+          className="absolute left-1/2 top-full -translate-x-1/2"
+          style={{
+            width: 0,
+            height: 0,
+            borderLeft: "5px solid transparent",
+            borderRight: "5px solid transparent",
+            borderTop: "5px solid rgb(212 212 216)",
+          }}
+        />
+        <span
+          aria-hidden
+          className="absolute left-1/2 top-full -translate-x-1/2"
+          style={{
+            marginTop: -1,
+            width: 0,
+            height: 0,
+            borderLeft: "4px solid transparent",
+            borderRight: "4px solid transparent",
+            borderTop: "4px solid white",
+          }}
+        />
+      </div>
     </div>
   );
 }

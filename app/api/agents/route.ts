@@ -28,7 +28,8 @@ export async function GET() {
       const raw = await fs.readFile(path.join(STATE_DIR, name), "utf8");
       const a = JSON.parse(raw) as ActiveAgent;
       if (typeof a.startedAt !== "number") continue;
-      if (now - a.startedAt > MAX_AGE_SECONDS) continue;
+      const ts = typeof a.lastActiveAt === "number" ? a.lastActiveAt : a.startedAt;
+      if (now - ts > MAX_AGE_SECONDS) continue;
       agents.push(a);
     } catch {
       // mid-write or unreadable file — pick up on next poll

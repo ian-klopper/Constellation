@@ -2,7 +2,30 @@
 
 A codebase visualizer built with Next.js 16 (App Router), TypeScript, and Tailwind v4. Scans the repo, extracts top-level exported symbols via `ts-morph`, and renders them as a grid of file cards grouped by directory. Long-term goal: overlay live AI-agent activity (read/write badges, reasoning callouts) on top of the static map.
 
-The visualizer scans `process.cwd()` and dogfoods itself — the home page renders this very repo.
+The visualizer scans `process.cwd()` and dogfoods itself — the home page renders this very repo. That means this CLAUDE.md is **also** part of the visualization. Keep it accurate: when the architecture, layout, or workflow changes, update this file in the same commit. See *Maintaining this file* below.
+
+## Current snapshot
+
+As of the last update to this file:
+
+- **Stack:** Next.js 16 (App Router) + React 19 + TypeScript 5.7 + Tailwind v4 (PostCSS plugin).
+- **Runtime deps:** `ts-morph` (symbol extraction), `fast-glob` (file discovery), `server-only` (guards server modules).
+- **Source layout** (no `src/` — files live at the repo root):
+  - `app/` — App Router entry. `page.tsx` is the home/visualizer route, `layout.tsx` + `globals.css` set up the shell.
+  - `lib/` — server-side scanner. `scan.ts` walks the repo, `classify.ts` maps TS symbols to `SymbolKind`, `types.ts` is the shared shape.
+  - `components/` — client/server React components. `Visualizer.tsx` is the top-level grid, composed of `DirectoryRegion` → `FileCard` → `SymbolRow` → `Glyph`.
+- **Scripts:** `npm run dev` / `build` / `start` / `lint`. No test runner yet.
+- **No DB, no API routes yet.** Everything is computed at request time inside a Server Component.
+
+## Maintaining this file
+
+Because Constellation visualizes itself, the model reading this repo (me) needs an accurate map. Treat CLAUDE.md as living docs:
+
+- When you add/remove a top-level directory, a major dependency, a build script, or a new architectural concept, update *Current snapshot* in the same commit.
+- When the user gives durable feedback about how we work together, add it to the relevant section here (or to memory if it's user-wide rather than project-specific).
+- When a long-term goal lands or shifts, update the opening paragraph.
+- Don't let the file balloon. If a section gets stale or rarely-true, prune it. Boring and accurate beats comprehensive and wrong.
+- Don't document things derivable from the code itself (file lists, function signatures) — the visualizer's whole job is to show those. Document *intent*, *constraints*, and *workflow*.
 
 ## Working with this project
 

@@ -4,15 +4,19 @@
  * and which other files it pulls from or is pulled by.
  */
 import { SymbolRow } from "./SymbolRow";
+import { HOVER_PANEL } from "@/lib/constants";
 import type { FileNode } from "@/lib/types";
 
-const PANEL_WIDTH = 340;
-const PANEL_HARD_MAX_H = 600;
-const CURSOR_OFFSET = 16;
-const VIEWPORT_PADDING = 8;
-// If there's less than this many pixels below the cursor, prefer flipping the
-// panel above the cursor (assuming there's more room up there).
-const MIN_BELOW_BEFORE_FLIP = 220;
+const {
+  WIDTH: PANEL_WIDTH,
+  HARD_MAX_H: PANEL_HARD_MAX_H,
+  FALLBACK_WIN_W,
+  FALLBACK_WIN_H,
+  MIN_MAX_H,
+  CURSOR_OFFSET,
+  VIEWPORT_PADDING,
+  MIN_BELOW_BEFORE_FLIP,
+} = HOVER_PANEL;
 
 export function HoverPanel({
   file,
@@ -23,8 +27,8 @@ export function HoverPanel({
 }) {
   if (!file || !mousePos) return null;
 
-  const winW = typeof window !== "undefined" ? window.innerWidth : 1200;
-  const winH = typeof window !== "undefined" ? window.innerHeight : 800;
+  const winW = typeof window !== "undefined" ? window.innerWidth : FALLBACK_WIN_W;
+  const winH = typeof window !== "undefined" ? window.innerHeight : FALLBACK_WIN_H;
 
   // Horizontal: default to the right of the cursor; flip to the left if the
   // (fixed-width) panel would run off the right edge.
@@ -48,7 +52,7 @@ export function HoverPanel({
     ? mousePos.y - CURSOR_OFFSET
     : mousePos.y + CURSOR_OFFSET;
   const maxH = Math.max(
-    80,
+    MIN_MAX_H,
     Math.min(PANEL_HARD_MAX_H, flipUp ? spaceAbove : spaceBelow),
   );
   const transform = flipUp ? "translateY(-100%)" : undefined;

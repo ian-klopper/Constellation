@@ -7,20 +7,10 @@
  * fades.
  */
 import { squarify } from "@/lib/treemap";
+import { TREEMAP } from "@/lib/constants";
 import type { TreeNode } from "@/lib/types";
 
-const TINTS: Record<string, string> = {
-  app: "bg-[#eef2f7]",
-  components: "bg-[#e7eee2]",
-  lib: "bg-[#f5f5f4]",
-  supabase: "bg-[#f3edd9]",
-  trigger: "bg-[#f0d9d9]",
-};
-
-const LABEL_HEIGHT = 16;
-const INNER_PAD = 3;
-const MIN_RENDER = 8;
-const DESC_MIN_HEIGHT = 32;
+const { LABEL_HEIGHT, INNER_PAD, MIN_RENDER, DESC_MIN_HEIGHT, TINTS } = TREEMAP;
 
 type Props = {
   node: TreeNode;

@@ -6,14 +6,22 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  OVERLAY,
+  OVERLAY_TIMING,
+  OVERLAY_MOTION,
+} from "@/lib/constants";
 import type { ActiveAgent } from "@/lib/types";
 
-const ICON_SIZE = 28;
-const PARK_TOP = 12;
-const PARK_RIGHT = 16;
-const STACK_OFFSET = 14;
-const IDLE_DEBOUNCE_MS = 600;
-const REMOVE_FADE_MS = 400;
+const { ICON_SIZE, PARK_TOP, PARK_RIGHT, PARK_GAP, STACK_OFFSET } = OVERLAY;
+const {
+  IDLE_DEBOUNCE_MS,
+  REMOVE_FADE_MS,
+  IDLE_TICK_MS,
+  POLL_INTERVAL_MS,
+  MOUNT_FADE_MS,
+  REMOVE_FADE_BUFFER_MS,
+} = OVERLAY_TIMING;
 
 type Pos = { x: number; y: number };
 
@@ -46,7 +54,7 @@ export function AgentOverlay() {
       }
     }
     poll();
-    const id = setInterval(poll, 1000);
+    const id = setInterval(poll, POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -65,7 +73,7 @@ export function AgentOverlay() {
             Date.now() - a.removingAt < REMOVE_FADE_MS,
         ),
       );
-    }, REMOVE_FADE_MS + 50);
+    }, REMOVE_FADE_MS + REMOVE_FADE_BUFFER_MS);
     return () => clearTimeout(id);
   }, [agents]);
 
@@ -83,10 +91,10 @@ export function AgentOverlay() {
     };
   }, [agents]);
 
-  // Re-render every 300ms so the idle debounce can re-evaluate even when the
-  // poll didn't change the agent list. Cheap — just a counter bump.
+  // Re-render so the idle debounce can re-evaluate even when the poll didn't
+  // change the agent list. Cheap — just a counter bump.
   useEffect(() => {
-    const id = setInterval(() => setTick((n) => n + 1), 300);
+    const id = setInterval(() => setTick((n) => n + 1), IDLE_TICK_MS);
     return () => clearInterval(id);
   }, []);
 
@@ -100,7 +108,7 @@ export function AgentOverlay() {
         const pos = positions.get(a.id);
         if (!pos) return null;
         const isFading = a.removingAt !== undefined;
-        const isMounting = now - a.mountedAt < 50;
+        const isMounting = now - a.mountedAt < MOUNT_FADE_MS;
         const isIdle = isAgentIdle(a, idleSinceRef);
         const opacity = isFading || isMounting || isIdle ? 0 : 1;
         return (
@@ -111,8 +119,7 @@ export function AgentOverlay() {
               left: 0,
               top: 0,
               transform: `translate(${pos.x}px, ${pos.y}px)`,
-              transition:
-                "transform 450ms cubic-bezier(0.22, 1, 0.36, 1), opacity 350ms ease-out",
+              transition: `transform ${OVERLAY_MOTION.TRANSFORM_MS}ms ${OVERLAY_MOTION.EASING}, opacity ${OVERLAY_MOTION.OPACITY_MS}ms ease-out`,
               opacity,
               willChange: "transform, opacity",
             }}
@@ -183,7 +190,7 @@ function AgentBubble({ agent }: { agent: ActiveAgent }) {
     <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2">
       <div
         className="relative whitespace-nowrap rounded-sm border border-zinc-300 bg-white px-2 py-1 text-[11px] leading-none text-zinc-800 shadow-sm"
-        style={{ transition: "opacity 200ms ease-out" }}
+        style={{ transition: `opacity ${OVERLAY_MOTION.BUBBLE_OPACITY_MS}ms ease-out` }}
       >
         <span className="block max-w-[28ch] truncate">{text}</span>
         <span
@@ -302,7 +309,7 @@ function cardPosition(
 
 function parkPosition(idx: number): Pos {
   return {
-    x: window.innerWidth - PARK_RIGHT - ICON_SIZE - idx * (ICON_SIZE + 6),
+    x: window.innerWidth - PARK_RIGHT - ICON_SIZE - idx * (ICON_SIZE + PARK_GAP),
     y: PARK_TOP,
   };
 }

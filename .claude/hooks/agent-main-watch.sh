@@ -17,8 +17,6 @@ HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 transcript="${1:?missing transcript}"
 target=".constellation/agents/_main.json"
 
-IDLE_TIMEOUT=3
-
 # Wait for the transcript to exist (newly resumed sessions may not have it yet).
 for _ in $(seq 1 20); do
   [ -e "$transcript" ] && break
@@ -26,26 +24,6 @@ for _ in $(seq 1 20); do
 done
 
 last_count=0
-last_event_at=$(date +%s)
-is_idle=0
-
-apply_idle() {
-  [ -f "$target" ] || return 0
-  local now tmp
-  now=$(date +%s)
-  tmp="${target}.tmp.$$"
-  if jq --argjson ts "$now" \
-       '. + {status: "idle", lastActiveAt: $ts}' \
-       < "$target" > "$tmp" 2>/dev/null; then
-    if [ -f "$target" ]; then
-      mv "$tmp" "$target"
-    else
-      rm -f "$tmp"
-    fi
-  else
-    rm -f "$tmp"
-  fi
-}
 
 write_message() {
   local msg="$1"
@@ -95,11 +73,6 @@ while [ -f "$target" ]; do
 
   total=$(wc -l < "$transcript" 2>/dev/null | tr -d ' ' || echo 0)
   if [ -z "$total" ] || [ "$total" -le "$last_count" ]; then
-    now=$(date +%s)
-    if [ $((now - last_event_at)) -ge "$IDLE_TIMEOUT" ] && [ "$is_idle" -eq 0 ]; then
-      apply_idle
-      is_idle=1
-    fi
     sleep 1
     continue
   fi
@@ -128,8 +101,6 @@ while [ -f "$target" ]; do
     tool_input="${latest_tool#*	}"
     activity=$(format_activity "$tool_name" "$tool_input")
     write_activity "$activity"
-    last_event_at=$(date +%s)
-    is_idle=0
   fi
 
   if [ -n "$latest_text" ]; then
@@ -146,8 +117,6 @@ while [ -f "$target" ]; do
       snippet=$(printf '%s' "$latest_text" | tr '\n' ' ' | sed -E 's/^[[:space:]]+//' | head -c 80)
     fi
     write_message "$snippet"
-    last_event_at=$(date +%s)
-    is_idle=0
   fi
 
   sleep 1

@@ -29,15 +29,6 @@
             "command": ".claude/hooks/agent-stop.sh"
           }
         ]
-      },
-      {
-        "matcher": "Read|Edit|Write|MultiEdit|Bash|Grep|Glob|Task|WebFetch|WebSearch",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/agent-idle.sh"
-          }
-        ]
       }
     ],
     "Stop": [

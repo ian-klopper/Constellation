@@ -102,13 +102,7 @@ export function AgentOverlay() {
         const isFading = a.removingAt !== undefined;
         const isMounting = now - a.mountedAt < 50;
         const isIdle = isAgentIdle(a, idleSinceRef);
-        const opacity = isFading
-          ? 0
-          : isMounting
-            ? 0
-            : isIdle
-              ? 0.55
-              : 1;
+        const opacity = isFading || isMounting || isIdle ? 0 : 1;
         return (
           <div
             key={a.id}

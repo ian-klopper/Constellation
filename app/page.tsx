@@ -1,15 +1,15 @@
 import { scanProject } from "@/lib/scan";
+import { Visualizer } from "@/components/Visualizer";
 
 export default async function HomePage() {
   const tree = await scanProject();
   return (
-    <main className="p-8">
-      <h1 className="text-lg">Constellation — codebase visualizer</h1>
-      <p className="mt-2 text-sm text-zinc-500">
-        Scanned {tree.groups.length} directories,{" "}
-        {tree.groups.reduce((n, g) => n + g.files.length, 0)} files. Visualizer
-        next.
-      </p>
+    <main>
+      <header className="border-b border-zinc-200 px-6 py-3 text-[11px] uppercase tracking-wider text-zinc-500">
+        Constellation — {tree.groups.length} directories,{" "}
+        {tree.groups.reduce((n, g) => n + g.files.length, 0)} files
+      </header>
+      <Visualizer tree={tree} />
     </main>
   );
 }

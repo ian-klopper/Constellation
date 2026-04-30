@@ -6,7 +6,10 @@
  * out of code so adding a tool or moving the state dir is a one-file
  * change.
  */
-import "server-only";
+// Intentionally not "server-only": this module is also imported by the
+// daemon (plain Node, not a Next.js bundle), where the server-only sentinel
+// throws at import time. The Next.js callers (lib/scan, /api/agents) are
+// already server-only by their own context.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 

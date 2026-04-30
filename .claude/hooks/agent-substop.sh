@@ -1,27 +1,14 @@
 #!/bin/bash
-# SubagentStop fires when any subagent (foreground or background) finishes.
-# We clean up the lifecycle file by matching agent_id against the file's
-# agentId field. For foreground, agent-touch.sh sets agentId during the
-# agent's first Read/Edit/Write. For background, agent-stop.sh sets it from
-# the spawn's tool_response. Either way, this is the universal "close" hook.
-
-set -u
+# Forwards SubagentStop to the daemon, which closes the lifecycle by
+# matching agent_id against in-memory state — no glob, no jq, no race.
 
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/config.sh
 . "$HOOK_DIR/lib/config.sh"
 
-input=$(cat)
-aid=$(printf '%s' "$input" | jq -r '.agent_id // empty')
-[ -z "$aid" ] && exit 0
+PORT="$(config_get '.daemon.port')"
+PORT="${PORT:-47317}"
 
-shopt -s nullglob
-
-for f in "$STATE_DIR"/*.json; do
-  case "$(basename "$f")" in _*) continue ;; esac
-  fid=$(jq -r '.agentId // empty' < "$f" 2>/dev/null) || continue
-  if [ "$fid" = "$aid" ]; then
-    rm -f "$f"
-    exit 0
-  fi
-done
+cat | curl -s -m 0.5 -X POST -H 'Content-Type: application/json' \
+  --data-binary @- "http://127.0.0.1:$PORT/event/subagent-stop" \
+  >/dev/null 2>&1 || true

@@ -57,7 +57,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "rm -f .constellation/agents/*.json"
+            "command": ".claude/hooks/session-start.sh"
           }
         ]
       }

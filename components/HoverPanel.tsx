@@ -7,9 +7,12 @@ import { SymbolRow } from "./SymbolRow";
 import type { FileNode } from "@/lib/types";
 
 const PANEL_WIDTH = 340;
+const PANEL_HARD_MAX_H = 600;
 const CURSOR_OFFSET = 16;
 const VIEWPORT_PADDING = 8;
-const MAX_HEIGHT_RATIO = 0.6;
+// If there's less than this many pixels below the cursor, prefer flipping the
+// panel above the cursor (assuming there's more room up there).
+const MIN_BELOW_BEFORE_FLIP = 220;
 
 export function HoverPanel({
   file,
@@ -22,26 +25,37 @@ export function HoverPanel({
 
   const winW = typeof window !== "undefined" ? window.innerWidth : 1200;
   const winH = typeof window !== "undefined" ? window.innerHeight : 800;
-  const maxH = winH * MAX_HEIGHT_RATIO;
 
-  // Default: down-and-right of cursor. Flip to the other side of the cursor
-  // if there isn't room, then clamp to the viewport so the panel never
-  // bleeds off-screen.
+  // Horizontal: default to the right of the cursor; flip to the left if the
+  // (fixed-width) panel would run off the right edge.
   let left = mousePos.x + CURSOR_OFFSET;
   if (left + PANEL_WIDTH > winW - VIEWPORT_PADDING) {
     left = mousePos.x - PANEL_WIDTH - CURSOR_OFFSET;
   }
   if (left < VIEWPORT_PADDING) left = VIEWPORT_PADDING;
 
-  let top = mousePos.y + CURSOR_OFFSET;
-  if (top + maxH > winH - VIEWPORT_PADDING) {
-    top = mousePos.y - maxH - CURSOR_OFFSET;
-  }
-  if (top < VIEWPORT_PADDING) top = VIEWPORT_PADDING;
+  // Vertical: panel height depends on content, so we can't pre-compute it.
+  // Trick: when flipping above the cursor, set top to (cursorY - offset) and
+  // apply translateY(-100%) so the panel's *bottom* anchors there. That way
+  // the near edge stays close to the cursor regardless of how tall the
+  // panel ends up — no leaping up to the top of the screen on short panels.
+  const spaceBelow = winH - mousePos.y - CURSOR_OFFSET - VIEWPORT_PADDING;
+  const spaceAbove = mousePos.y - CURSOR_OFFSET - VIEWPORT_PADDING;
+  const flipUp =
+    spaceBelow < MIN_BELOW_BEFORE_FLIP && spaceAbove > spaceBelow;
+
+  const top = flipUp
+    ? mousePos.y - CURSOR_OFFSET
+    : mousePos.y + CURSOR_OFFSET;
+  const maxH = Math.max(
+    80,
+    Math.min(PANEL_HARD_MAX_H, flipUp ? spaceAbove : spaceBelow),
+  );
+  const transform = flipUp ? "translateY(-100%)" : undefined;
 
   return (
     <div
-      style={{ left, top, width: PANEL_WIDTH, maxHeight: maxH }}
+      style={{ left, top, width: PANEL_WIDTH, maxHeight: maxH, transform }}
       className="pointer-events-none fixed z-40 overflow-y-auto rounded-sm border border-zinc-300 bg-white/95 p-3 text-[11px] text-zinc-800 shadow-lg backdrop-blur-sm"
     >
       <div className="mb-1 text-[10px] uppercase tracking-[0.15em] text-zinc-500">

@@ -12,13 +12,13 @@ const TINTS: Record<string, string> = {
 export function DirectoryRegion({ group }: { group: DirectoryGroup }) {
   const tint = TINTS[group.name] ?? "bg-zinc-50";
   return (
-    <section className={`relative ${tint} px-6 pt-10 pb-6`}>
-      <div className="absolute right-6 top-3 text-[11px] font-medium tracking-wider uppercase text-zinc-500">
+    <section className={`relative ${tint} px-6 pt-9 pb-6`}>
+      <div className="absolute right-6 top-2.5 text-[11px] font-medium tracking-[0.15em] uppercase text-zinc-500">
         {group.name}/
       </div>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
         {group.files.map((file) => (
-          <FileCard key={file.path} file={file} />
+          <FileCard key={file.path} file={file} stripPrefix={group.name} />
         ))}
       </div>
     </section>

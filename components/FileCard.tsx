@@ -14,7 +14,10 @@ export function FileCard({
     : file.path;
 
   return (
-    <article className="flex flex-col border border-zinc-300 bg-white/40">
+    <article
+      data-path={file.path}
+      className="flex flex-col border border-zinc-300 bg-white/40"
+    >
       <header className="border-b border-zinc-300 bg-white/30 px-3 py-2 text-[11px] text-zinc-600">
         {display}
       </header>

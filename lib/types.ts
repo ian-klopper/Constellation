@@ -32,4 +32,6 @@ export type ActiveAgent = {
   subagent_type: string;
   description: string;
   startedAt: number;
+  agentId?: string;
+  currentPath?: string;
 };

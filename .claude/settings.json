@@ -9,6 +9,15 @@
             "command": "input=$(cat); mkdir -p .constellation/agents; id=$(printf '%s' \"$input\" | jq -r '.tool_use_id // empty'); [ -n \"$id\" ] && printf '%s' \"$input\" | jq -c --arg ts \"$(date +%s)\" '{id: .tool_use_id, subagent_type: (.tool_input.subagent_type // \"unknown\"), description: (.tool_input.description // \"\"), startedAt: ($ts | tonumber)}' > \".constellation/agents/${id}.json\""
           }
         ]
+      },
+      {
+        "matcher": "Read|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/agent-touch.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [

@@ -14,8 +14,11 @@ As of the last update to this file:
 - **Source layout** (no `src/` — files live at the repo root):
   - `app/` — App Router entry. `page.tsx` is the home/visualizer route, `layout.tsx` + `globals.css` set up the shell. `api/agents/route.ts` returns the list of currently-running subagents.
   - `lib/` — server-side scanner. `scan.ts` walks the repo, `classify.ts` maps TS symbols to `SymbolKind`, `types.ts` is the shared shape (also exports `ActiveAgent`).
-  - `components/` — React components. Default is server; client components opt in with `"use client"`. `Visualizer.tsx` is the static grid (`DirectoryRegion` → `FileCard` → `SymbolRow` → `Glyph`); `ActiveAgents.tsx` is the lone client component, polling `/api/agents` once a second.
-- **Live agent visibility:** project-scoped Claude Code hooks in `.claude/settings.json` mirror subagent lifecycle to disk — `PreToolUse`/`PostToolUse` matched on `Agent` write/delete one JSON file per running subagent under `.constellation/agents/<tool_use_id>.json`. `.constellation/` is gitignored runtime state, created on demand. The dashboard reads this directory through the API route; nothing happens to the UI when no subagents are running.
+  - `components/` — React components. Default is server; client components opt in with `"use client"`. `Visualizer.tsx` is the static grid (`DirectoryRegion` → `FileCard` → `SymbolRow` → `Glyph`); `ActiveAgents.tsx` (badge bar) and `AgentOverlay.tsx` (moving icons over file cards) are the client components, both polling `/api/agents` once a second.
+- **Live agent visibility:** project-scoped Claude Code hooks in `.claude/settings.json` mirror subagent activity to disk under `.constellation/agents/<tool_use_id>.json` (gitignored runtime state).
+  - `PreToolUse`/`PostToolUse` on `Agent` writes/deletes the lifecycle file (id, subagent_type, description, startedAt).
+  - `PreToolUse` on `Read|Edit|Write|MultiEdit` runs `.claude/hooks/agent-touch.sh`, which uses `agent_id` from the hook payload to update the matching lifecycle file with `agentId` and `currentPath`. The first observation of a subagent's `agent_id` "lazy-binds" it to the oldest lifecycle file with the same `subagent_type`. Note: only **foreground** subagents fire parent-scoped hooks; background subagents run in a separate execution context and aren't tracked.
+  - `FileCard` carries a `data-path` attribute; the overlay anchors icons to those cards via `getBoundingClientRect()` and slides between them with a CSS transform transition. Idle agents (no current file or path not in the visualization) park in a dock under the badge bar.
 - **Scripts:** `npm run dev` / `build` / `start` / `lint`. No test runner yet.
 
 ## Maintaining this file

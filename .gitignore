@@ -28,3 +28,9 @@ node_modules/
 out/
 next-env.d.ts
 *.tsbuildinfo
+
+# Constellation runtime state (live subagent tracking)
+.constellation/
+
+# Claude Code — keep user-local overrides out of the repo
+.claude/settings.local.json

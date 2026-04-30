@@ -10,12 +10,13 @@ As of the last update to this file:
 
 - **Stack:** Next.js 16 (App Router) + React 19 + TypeScript 5.7 + Tailwind v4 (PostCSS plugin).
 - **Runtime deps:** `ts-morph` (symbol extraction), `fast-glob` (file discovery), `server-only` (guards server modules).
+- **System deps:** `jq` (used inside Claude Code hook commands — `brew install jq` on macOS).
 - **Source layout** (no `src/` — files live at the repo root):
-  - `app/` — App Router entry. `page.tsx` is the home/visualizer route, `layout.tsx` + `globals.css` set up the shell.
-  - `lib/` — server-side scanner. `scan.ts` walks the repo, `classify.ts` maps TS symbols to `SymbolKind`, `types.ts` is the shared shape.
-  - `components/` — client/server React components. `Visualizer.tsx` is the top-level grid, composed of `DirectoryRegion` → `FileCard` → `SymbolRow` → `Glyph`.
+  - `app/` — App Router entry. `page.tsx` is the home/visualizer route, `layout.tsx` + `globals.css` set up the shell. `api/agents/route.ts` returns the list of currently-running subagents.
+  - `lib/` — server-side scanner. `scan.ts` walks the repo, `classify.ts` maps TS symbols to `SymbolKind`, `types.ts` is the shared shape (also exports `ActiveAgent`).
+  - `components/` — React components. Default is server; client components opt in with `"use client"`. `Visualizer.tsx` is the static grid (`DirectoryRegion` → `FileCard` → `SymbolRow` → `Glyph`); `ActiveAgents.tsx` is the lone client component, polling `/api/agents` once a second.
+- **Live agent visibility:** project-scoped Claude Code hooks in `.claude/settings.json` mirror subagent lifecycle to disk — `PreToolUse`/`PostToolUse` matched on `Agent` write/delete one JSON file per running subagent under `.constellation/agents/<tool_use_id>.json`. `.constellation/` is gitignored runtime state, created on demand. The dashboard reads this directory through the API route; nothing happens to the UI when no subagents are running.
 - **Scripts:** `npm run dev` / `build` / `start` / `lint`. No test runner yet.
-- **No DB, no API routes yet.** Everything is computed at request time inside a Server Component.
 
 ## Maintaining this file
 

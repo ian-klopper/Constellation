@@ -1,5 +1,6 @@
 import { scanProject } from "@/lib/scan";
 import { Visualizer } from "@/components/Visualizer";
+import { ActiveAgents } from "@/components/ActiveAgents";
 
 export default async function HomePage() {
   const tree = await scanProject();
@@ -9,6 +10,7 @@ export default async function HomePage() {
         Constellation — {tree.groups.length} directories,{" "}
         {tree.groups.reduce((n, g) => n + g.files.length, 0)} files
       </header>
+      <ActiveAgents />
       <Visualizer tree={tree} />
     </main>
   );

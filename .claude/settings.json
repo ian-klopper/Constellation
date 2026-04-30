@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); mkdir -p .constellation/agents; id=$(printf '%s' \"$input\" | jq -r '.tool_use_id // empty'); [ -n \"$id\" ] && printf '%s' \"$input\" | jq -c --arg ts \"$(date +%s)\" '{id: .tool_use_id, subagent_type: (.tool_input.subagent_type // \"unknown\"), description: (.tool_input.description // \"\"), startedAt: ($ts | tonumber)}' > \".constellation/agents/${id}.json\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); id=$(printf '%s' \"$input\" | jq -r '.tool_use_id // empty'); [ -n \"$id\" ] && rm -f \".constellation/agents/${id}.json\""
+          }
+        ]
+      }
+    ]
+  }
+}

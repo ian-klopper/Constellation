@@ -26,3 +26,10 @@ export type CodebaseTree = {
   root: string;
   groups: DirectoryGroup[];
 };
+
+export type ActiveAgent = {
+  id: string;
+  subagent_type: string;
+  description: string;
+  startedAt: number;
+};

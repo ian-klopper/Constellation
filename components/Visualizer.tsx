@@ -1,12 +1,12 @@
 /**
- * Client wrapper around TreemapNode. Measures its container with
- * ResizeObserver, holds the hovered-file state, derives the input/output sets
- * from the import graph, and renders the HoverPanel. The whole interactive
- * layer of the visualizer hangs off this component.
+ * The interactive shell around the map. Watches its own size so the layout
+ * fills the page, remembers which file your cursor is on and where the
+ * cursor is, figures out which other files that file is connected to, and
+ * shows the floating info card next to your cursor.
  */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TreemapNode } from "./TreemapNode";
 import { HoverPanel } from "./HoverPanel";
 import type { CodebaseTree, FileNode, TreeNode } from "@/lib/types";
@@ -15,6 +15,17 @@ export function Visualizer({ tree }: { tree: CodebaseTree }) {
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+
+  const handleHover = useCallback(
+    (path: string | null, pos?: { x: number; y: number }) => {
+      setHoveredPath(path);
+      if (pos) setMousePos(pos);
+    },
+    [],
+  );
 
   useEffect(() => {
     const el = ref.current;
@@ -65,10 +76,10 @@ export function Visualizer({ tree }: { tree: CodebaseTree }) {
           hoveredPath={hoveredPath}
           inputs={inputs}
           outputs={outputs}
-          onHover={setHoveredPath}
+          onHover={handleHover}
         />
       )}
-      <HoverPanel file={hoveredFile} />
+      <HoverPanel file={hoveredFile} mousePos={mousePos} />
     </div>
   );
 }

@@ -1,16 +1,49 @@
 /**
- * Floating info panel pinned to the bottom-left of the viewport. Shows the
- * description, exports, and import/importer lists for the file the cursor is
- * currently over. Hidden when nothing is hovered.
+ * The little card that pops up next to your cursor when you hover a file.
+ * Shows what the file does, the things it shares with the rest of the app,
+ * and which other files it pulls from or is pulled by.
  */
 import { SymbolRow } from "./SymbolRow";
 import type { FileNode } from "@/lib/types";
 
-export function HoverPanel({ file }: { file: FileNode | null }) {
-  if (!file) return null;
+const PANEL_WIDTH = 340;
+const CURSOR_OFFSET = 16;
+const VIEWPORT_PADDING = 8;
+const MAX_HEIGHT_RATIO = 0.6;
+
+export function HoverPanel({
+  file,
+  mousePos,
+}: {
+  file: FileNode | null;
+  mousePos: { x: number; y: number } | null;
+}) {
+  if (!file || !mousePos) return null;
+
+  const winW = typeof window !== "undefined" ? window.innerWidth : 1200;
+  const winH = typeof window !== "undefined" ? window.innerHeight : 800;
+  const maxH = winH * MAX_HEIGHT_RATIO;
+
+  // Default: down-and-right of cursor. Flip to the other side of the cursor
+  // if there isn't room, then clamp to the viewport so the panel never
+  // bleeds off-screen.
+  let left = mousePos.x + CURSOR_OFFSET;
+  if (left + PANEL_WIDTH > winW - VIEWPORT_PADDING) {
+    left = mousePos.x - PANEL_WIDTH - CURSOR_OFFSET;
+  }
+  if (left < VIEWPORT_PADDING) left = VIEWPORT_PADDING;
+
+  let top = mousePos.y + CURSOR_OFFSET;
+  if (top + maxH > winH - VIEWPORT_PADDING) {
+    top = mousePos.y - maxH - CURSOR_OFFSET;
+  }
+  if (top < VIEWPORT_PADDING) top = VIEWPORT_PADDING;
 
   return (
-    <div className="pointer-events-none fixed bottom-4 left-4 z-40 w-[320px] max-h-[60vh] overflow-y-auto rounded-sm border border-zinc-300 bg-white/95 p-3 text-[11px] text-zinc-800 shadow-lg backdrop-blur-sm">
+    <div
+      style={{ left, top, width: PANEL_WIDTH, maxHeight: maxH }}
+      className="pointer-events-none fixed z-40 overflow-y-auto rounded-sm border border-zinc-300 bg-white/95 p-3 text-[11px] text-zinc-800 shadow-lg backdrop-blur-sm"
+    >
       <div className="mb-1 text-[10px] uppercase tracking-[0.15em] text-zinc-500">
         {file.path}
       </div>

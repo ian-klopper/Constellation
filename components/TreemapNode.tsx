@@ -1,8 +1,10 @@
 /**
- * Recursive tile for the squarified treemap. Directories run squarify over
- * their children and absolutely position each one; files render the filename,
- * the description, and apply one of four hover-state classes (hovered, input,
- * output, dim) so the user can see a file's relationships at a glance.
+ * Draws one piece of the map. If it's a folder, it slices its area into
+ * rectangles for the things inside and asks itself to draw each one. If
+ * it's a file, it draws the filename, the description, and changes color
+ * when you hover — the file you're on lights up, the files it pulls from
+ * glow blue, the files that pull from it glow amber, and everything else
+ * fades.
  */
 import { squarify } from "@/lib/treemap";
 import type { TreeNode } from "@/lib/types";
@@ -31,7 +33,7 @@ type Props = {
   hoveredPath: string | null;
   inputs: Set<string>;
   outputs: Set<string>;
-  onHover: (path: string | null) => void;
+  onHover: (path: string | null, pos?: { x: number; y: number }) => void;
 };
 
 export function TreemapNode({
@@ -80,7 +82,12 @@ export function TreemapNode({
       <article
         data-path={node.path}
         style={style}
-        onMouseEnter={() => onHover(node.path)}
+        onMouseEnter={(e) =>
+          onHover(node.path, { x: e.clientX, y: e.clientY })
+        }
+        onMouseMove={(e) =>
+          onHover(node.path, { x: e.clientX, y: e.clientY })
+        }
         onMouseLeave={() => onHover(null)}
         className={`relative overflow-hidden border border-zinc-300 bg-white/40 transition-[opacity,background-color,border-color] duration-150 ${stateClass}`}
       >
@@ -88,7 +95,7 @@ export function TreemapNode({
           {node.name}
         </header>
         {showDescription && (
-          <p className="line-clamp-3 px-2 py-1.5 text-[11px] leading-snug text-zinc-700">
+          <p className="px-2 py-1.5 text-[11px] leading-snug text-zinc-700">
             {node.description}
           </p>
         )}

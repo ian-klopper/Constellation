@@ -6,8 +6,11 @@
  * glow blue, the files that pull from it glow amber, and everything else
  * fades.
  */
+"use client";
+
 import { squarify } from "@/lib/treemap";
 import { TREEMAP } from "@/lib/constants";
+import { useHover } from "./HoverContext";
 import type { TreeNode } from "@/lib/types";
 
 const { LABEL_HEIGHT, INNER_PAD, MIN_RENDER, DESC_MIN_HEIGHT, TINTS } = TREEMAP;
@@ -20,25 +23,9 @@ type Props = {
   h: number;
   depth: number;
   tint: string | null;
-  hoveredPath: string | null;
-  inputs: Set<string>;
-  outputs: Set<string>;
-  onHover: (path: string | null, pos?: { x: number; y: number }) => void;
 };
 
-export function TreemapNode({
-  node,
-  x,
-  y,
-  w,
-  h,
-  depth,
-  tint,
-  hoveredPath,
-  inputs,
-  outputs,
-  onHover,
-}: Props) {
+export function TreemapNode({ node, x, y, w, h, depth, tint }: Props) {
   const style = {
     position: "absolute" as const,
     left: x,
@@ -48,49 +35,7 @@ export function TreemapNode({
   };
 
   if (node.kind === "file") {
-    const isHovered = hoveredPath === node.path;
-    const isInput = inputs.has(node.path);
-    const isOutput = outputs.has(node.path);
-    const isUnrelated =
-      hoveredPath !== null && !isHovered && !isInput && !isOutput;
-
-    const stateClass = isHovered
-      ? "tile-hovered"
-      : isInput
-        ? "tile-input"
-        : isOutput
-          ? "tile-output"
-          : isUnrelated
-            ? "tile-dim"
-            : "";
-
-    const showDescription = h >= DESC_MIN_HEIGHT && node.description;
-
-    return (
-      // data-path is the AgentOverlay contract — see components/AgentOverlay.tsx.
-      // Removing or renaming it will break agent-icon anchoring.
-      <article
-        data-path={node.path}
-        style={style}
-        onMouseEnter={(e) =>
-          onHover(node.path, { x: e.clientX, y: e.clientY })
-        }
-        onMouseMove={(e) =>
-          onHover(node.path, { x: e.clientX, y: e.clientY })
-        }
-        onMouseLeave={() => onHover(null)}
-        className={`relative overflow-hidden border border-zinc-300 bg-white/40 transition-[opacity,background-color,border-color] duration-150 ${stateClass}`}
-      >
-        <header className="truncate border-b border-zinc-300 bg-white/30 px-2 py-1 text-[11px] text-zinc-600">
-          {node.name}
-        </header>
-        {showDescription && (
-          <p className="px-2 py-1.5 text-[11px] leading-snug text-zinc-700">
-            {node.description}
-          </p>
-        )}
-      </article>
-    );
+    return <FileTile node={node} style={style} h={h} />;
   }
 
   // Directory branch.
@@ -145,13 +90,61 @@ export function TreemapNode({
               h={r.h}
               depth={depth + 1}
               tint={childTint}
-              hoveredPath={hoveredPath}
-              inputs={inputs}
-              outputs={outputs}
-              onHover={onHover}
             />
           );
         })}
     </section>
+  );
+}
+
+function FileTile({
+  node,
+  style,
+  h,
+}: {
+  node: Extract<TreeNode, { kind: "file" }>;
+  style: React.CSSProperties;
+  h: number;
+}) {
+  const { hoveredPath, inputs, outputs, setHover } = useHover();
+
+  const isHovered = hoveredPath === node.path;
+  const isInput = inputs.has(node.path);
+  const isOutput = outputs.has(node.path);
+  const isUnrelated =
+    hoveredPath !== null && !isHovered && !isInput && !isOutput;
+
+  const stateClass = isHovered
+    ? "tile-hovered"
+    : isInput
+      ? "tile-input"
+      : isOutput
+        ? "tile-output"
+        : isUnrelated
+          ? "tile-dim"
+          : "";
+
+  const showDescription = h >= DESC_MIN_HEIGHT && node.description;
+
+  return (
+    // data-path is the AgentOverlay contract — see components/AgentOverlay.tsx.
+    // Removing or renaming it will break agent-icon anchoring.
+    <article
+      data-path={node.path}
+      style={style}
+      onMouseEnter={(e) => setHover(node.path, { x: e.clientX, y: e.clientY })}
+      onMouseMove={(e) => setHover(node.path, { x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => setHover(null)}
+      className={`relative overflow-hidden border border-zinc-300 bg-white/40 transition-[opacity,background-color,border-color] duration-150 ${stateClass}`}
+    >
+      <header className="truncate border-b border-zinc-300 bg-white/30 px-2 py-1 text-[11px] text-zinc-600">
+        {node.name}
+      </header>
+      {showDescription && (
+        <p className="px-2 py-1.5 text-[11px] leading-snug text-zinc-700">
+          {node.description}
+        </p>
+      )}
+    </article>
   );
 }

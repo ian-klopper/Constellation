@@ -9,7 +9,7 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Interface — codebase visualizer",
+  title: "Constellation — codebase visualizer",
   description: "A visual map of the source files and symbols in this repo.",
 };
 

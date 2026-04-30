@@ -1,5 +1,5 @@
 {
-  "name": "interface",
+  "name": "constellation",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -20,6 +20,7 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "server-only": "^0.0.1",
     "tailwindcss": "^4.2.4",
     "typescript": "^5.7.0"
   }

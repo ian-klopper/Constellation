@@ -1,6 +1,8 @@
-# Interface
+# Constellation
 
-New project. Stack and goals TBD — update this file as the shape of the project becomes clear.
+A codebase visualizer built with Next.js 16 (App Router), TypeScript, and Tailwind v4. Scans the repo, extracts top-level exported symbols via `ts-morph`, and renders them as a grid of file cards grouped by directory. Long-term goal: overlay live AI-agent activity (read/write badges, reasoning callouts) on top of the static map.
+
+The visualizer scans `process.cwd()` and dogfoods itself — the home page renders this very repo.
 
 ## Working with this project
 

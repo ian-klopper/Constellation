@@ -5,6 +5,8 @@
  * like. If you change a shape here, every file that touches that data will
  * notice.
  */
+import { z } from "zod";
+
 export type SymbolKind =
   | "component"
   | "route"
@@ -45,16 +47,22 @@ export type CodebaseTree = {
   tree: DirectoryNode;
 };
 
-export type ActiveAgent = {
-  id: string;
-  subagent_type: string;
-  description: string;
-  startedAt: number;
-  lastActiveAt?: number;
-  agentId?: string;
-  currentPath?: string;
-  kind?: "foreground" | "background";
-  status?: "active" | "idle";
-  currentActivity?: string;
-  currentMessage?: string;
-};
+// Lifecycle-file shape written by hooks (today: bash; soon: TS daemon)
+// and read by /api/agents. The frontend shape (DisplayAgent) extends this
+// with mountedAt/removingAt for fade animation — that's a client-only
+// concern and stays in components/AgentOverlay.tsx.
+export const ActiveAgentSchema = z.object({
+  id: z.string(),
+  subagent_type: z.string(),
+  description: z.string(),
+  startedAt: z.number(),
+  lastActiveAt: z.number().optional(),
+  agentId: z.string().optional(),
+  currentPath: z.string().optional(),
+  kind: z.enum(["foreground", "background"]).optional(),
+  status: z.enum(["active", "idle"]).optional(),
+  currentActivity: z.string().optional(),
+  currentMessage: z.string().optional(),
+});
+
+export type ActiveAgent = z.infer<typeof ActiveAgentSchema>;

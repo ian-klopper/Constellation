@@ -6,11 +6,16 @@
 # and self-expire via the API's lastActiveAt staleness filter.
 
 set -u
+
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/config.sh
+. "$HOOK_DIR/lib/config.sh"
+
 input=$(cat)
 id=$(printf '%s' "$input" | jq -r '.tool_use_id // empty')
 [ -z "$id" ] && exit 0
 
-mkdir -p .constellation/agents
+mkdir -p "$STATE_DIR"
 now=$(date +%s)
 
 printf '%s' "$input" | jq -c --argjson ts "$now" '{
@@ -20,4 +25,4 @@ printf '%s' "$input" | jq -c --argjson ts "$now" '{
   startedAt: $ts,
   lastActiveAt: $ts,
   kind: (if .tool_input.run_in_background then "background" else "foreground" end)
-}' > ".constellation/agents/${id}.json"
+}' > "$STATE_DIR/${id}.json"

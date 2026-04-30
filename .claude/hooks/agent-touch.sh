@@ -11,6 +11,8 @@ set -u
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/activity.sh
 . "$HOOK_DIR/lib/activity.sh"
+# shellcheck source=lib/config.sh
+. "$HOOK_DIR/lib/config.sh"
 
 input=$(cat)
 aid=$(printf '%s' "$input" | jq -r '.agent_id // empty')
@@ -31,7 +33,7 @@ if [ -n "$fpath" ]; then
   fi
 fi
 
-mkdir -p .constellation/agents
+mkdir -p "$STATE_DIR"
 shopt -s nullglob
 now=$(date +%s)
 
@@ -43,7 +45,7 @@ merge_filter='. + {status: "active", lastActiveAt: $ts}'
 
 # Main agent: upsert _main.json. Underscore prefix keeps it out of subagent bind loops.
 if [ -z "$aid" ]; then
-  target=".constellation/agents/_main.json"
+  target="$STATE_DIR/_main.json"
   tmp="${target}.tmp.$$"
   if [ -f "$target" ]; then
     if jq --arg path "$rel" --arg activity "$activity" --argjson ts "$now" \
@@ -81,7 +83,7 @@ atype=$(printf '%s' "$input" | jq -r '.agent_type // empty')
 
 # 1) If we've already bound this agent_id to a lifecycle file, reuse it.
 target=""
-for f in .constellation/agents/*.json; do
+for f in "$STATE_DIR"/*.json; do
   case "$(basename "$f")" in _*) continue ;; esac
   fid=$(jq -r '.agentId // empty' < "$f" 2>/dev/null) || continue
   if [ "$fid" = "$aid" ]; then
@@ -95,7 +97,7 @@ done
 if [ -z "$target" ]; then
   oldest=""
   oldest_mtime=""
-  for f in .constellation/agents/*.json; do
+  for f in "$STATE_DIR"/*.json; do
     case "$(basename "$f")" in _*) continue ;; esac
     fid=$(jq -r '.agentId // empty' < "$f" 2>/dev/null) || continue
     [ -n "$fid" ] && continue

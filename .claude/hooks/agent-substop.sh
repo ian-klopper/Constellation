@@ -6,13 +6,18 @@
 # the spawn's tool_response. Either way, this is the universal "close" hook.
 
 set -u
+
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/config.sh
+. "$HOOK_DIR/lib/config.sh"
+
 input=$(cat)
 aid=$(printf '%s' "$input" | jq -r '.agent_id // empty')
 [ -z "$aid" ] && exit 0
 
 shopt -s nullglob
 
-for f in .constellation/agents/*.json; do
+for f in "$STATE_DIR"/*.json; do
   case "$(basename "$f")" in _*) continue ;; esac
   fid=$(jq -r '.agentId // empty' < "$f" 2>/dev/null) || continue
   if [ "$fid" = "$aid" ]; then

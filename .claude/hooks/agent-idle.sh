@@ -7,11 +7,15 @@
 
 set -u
 
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/config.sh
+. "$HOOK_DIR/lib/config.sh"
+
 input=$(cat)
 aid=$(printf '%s' "$input" | jq -r '.agent_id // empty')
 hook_event=$(printf '%s' "$input" | jq -r '.hook_event_name // empty')
 
-mkdir -p .constellation/agents
+mkdir -p "$STATE_DIR"
 shopt -s nullglob
 now=$(date +%s)
 
@@ -34,12 +38,12 @@ flip_idle() {
 
 # Main agent or Stop event: target _main.json.
 if [ -z "$aid" ] || [ "$hook_event" = "Stop" ]; then
-  flip_idle ".constellation/agents/_main.json"
+  flip_idle "$STATE_DIR/_main.json"
   exit 0
 fi
 
 # Foreground subagent: find the lifecycle file by matching agentId.
-for f in .constellation/agents/*.json; do
+for f in "$STATE_DIR"/*.json; do
   case "$(basename "$f")" in _*) continue ;; esac
   fid=$(jq -r '.agentId // empty' < "$f" 2>/dev/null) || continue
   if [ "$fid" = "$aid" ]; then

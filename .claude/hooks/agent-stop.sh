@@ -6,11 +6,16 @@
 # does the eventual cleanup when the child actually finishes.
 
 set -u
+
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/config.sh
+. "$HOOK_DIR/lib/config.sh"
+
 input=$(cat)
 id=$(printf '%s' "$input" | jq -r '.tool_use_id // empty')
 [ -z "$id" ] && exit 0
 
-target=".constellation/agents/${id}.json"
+target="$STATE_DIR/${id}.json"
 [ ! -f "$target" ] && exit 0
 
 kind=$(jq -r '.kind // "foreground"' < "$target" 2>/dev/null)
@@ -33,6 +38,6 @@ fi
 output_file=$(printf '%s' "$input" | jq -r '.tool_response.outputFile // empty')
 cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
 if [ -n "$output_file" ]; then
-  nohup .claude/hooks/agent-watch.sh "$target" "$output_file" "$cwd" >/dev/null 2>&1 &
+  nohup "$HOOK_DIR/agent-watch.sh" "$target" "$output_file" "$cwd" >/dev/null 2>&1 &
   disown 2>/dev/null || true
 fi

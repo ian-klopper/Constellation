@@ -1,0 +1,20 @@
+{
+  "stateDir": ".constellation/agents",
+  "watchedTools": [
+    "Read",
+    "Edit",
+    "Write",
+    "MultiEdit",
+    "Bash",
+    "Grep",
+    "Glob",
+    "Task",
+    "WebFetch",
+    "WebSearch"
+  ],
+  "daemon": {
+    "port": 47317,
+    "pidFile": ".constellation/daemon.pid"
+  },
+  "agentTtlSeconds": 1800
+}

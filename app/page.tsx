@@ -5,7 +5,6 @@
 import { scanProject, countTree } from "@/lib/scan";
 import { Visualizer } from "@/components/Visualizer";
 import { ActiveAgents } from "@/components/ActiveAgents";
-import { AgentOverlay } from "@/components/AgentOverlay";
 
 export default async function HomePage() {
   const tree = await scanProject();
@@ -20,7 +19,6 @@ export default async function HomePage() {
       <div className="min-h-0 flex-1">
         <Visualizer tree={tree} />
       </div>
-      <AgentOverlay />
     </main>
   );
 }

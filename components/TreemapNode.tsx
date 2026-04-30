@@ -11,6 +11,7 @@
 import { squarify } from "@/lib/treemap";
 import { TREEMAP } from "@/lib/constants";
 import { useHover } from "./HoverContext";
+import { useRegisterTile } from "./TileRegistry";
 import type { TreeNode } from "@/lib/types";
 
 const { LABEL_HEIGHT, INNER_PAD, MIN_RENDER, DESC_MIN_HEIGHT, TINTS } = TREEMAP;
@@ -107,6 +108,7 @@ function FileTile({
   h: number;
 }) {
   const { hoveredPath, inputs, outputs, setHover } = useHover();
+  const registerTile = useRegisterTile(node.path);
 
   const isHovered = hoveredPath === node.path;
   const isInput = inputs.has(node.path);
@@ -127,9 +129,10 @@ function FileTile({
   const showDescription = h >= DESC_MIN_HEIGHT && node.description;
 
   return (
-    // data-path is the AgentOverlay contract — see components/AgentOverlay.tsx.
-    // Removing or renaming it will break agent-icon anchoring.
+    // ref => TileRegistry; data-path is kept as a redundant escape hatch
+    // for DevTools inspection and as a fallback if the registry breaks.
     <article
+      ref={registerTile}
       data-path={node.path}
       style={style}
       onMouseEnter={(e) => setHover(node.path, { x: e.clientX, y: e.clientY })}

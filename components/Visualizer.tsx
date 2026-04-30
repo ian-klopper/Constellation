@@ -10,6 +10,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TreemapNode } from "./TreemapNode";
 import { HoverPanel } from "./HoverPanel";
 import { HoverContext, type HoverContextValue } from "./HoverContext";
+import { TileRegistryProvider } from "./TileRegistry";
+import { AgentOverlay } from "./AgentOverlay";
 import type { CodebaseTree, FileNode, TreeNode } from "@/lib/types";
 
 export function Visualizer({ tree }: { tree: CodebaseTree }) {
@@ -70,20 +72,23 @@ export function Visualizer({ tree }: { tree: CodebaseTree }) {
 
   return (
     <HoverContext.Provider value={hoverValue}>
-      <div ref={ref} className="relative h-full w-full">
-        {size && size.w > 0 && size.h > 0 && (
-          <TreemapNode
-            node={tree.tree}
-            x={0}
-            y={0}
-            w={size.w}
-            h={size.h}
-            depth={0}
-            tint={null}
-          />
-        )}
-        <HoverPanel file={hoveredFile} mousePos={mousePos} />
-      </div>
+      <TileRegistryProvider>
+        <div ref={ref} className="relative h-full w-full">
+          {size && size.w > 0 && size.h > 0 && (
+            <TreemapNode
+              node={tree.tree}
+              x={0}
+              y={0}
+              w={size.w}
+              h={size.h}
+              depth={0}
+              tint={null}
+            />
+          )}
+          <HoverPanel file={hoveredFile} mousePos={mousePos} />
+        </div>
+        <AgentOverlay />
+      </TileRegistryProvider>
     </HoverContext.Provider>
   );
 }

@@ -1,4 +1,9 @@
-import { SymbolRow } from "./SymbolRow";
+/**
+ * Recursive tile for the squarified treemap. Directories run squarify over
+ * their children and absolutely position each one; files render the filename,
+ * the description, and apply one of four hover-state classes (hovered, input,
+ * output, dim) so the user can see a file's relationships at a glance.
+ */
 import { squarify } from "@/lib/treemap";
 import type { TreeNode } from "@/lib/types";
 
@@ -13,6 +18,21 @@ const TINTS: Record<string, string> = {
 const LABEL_HEIGHT = 16;
 const INNER_PAD = 3;
 const MIN_RENDER = 8;
+const DESC_MIN_HEIGHT = 32;
+
+type Props = {
+  node: TreeNode;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  depth: number;
+  tint: string | null;
+  hoveredPath: string | null;
+  inputs: Set<string>;
+  outputs: Set<string>;
+  onHover: (path: string | null) => void;
+};
 
 export function TreemapNode({
   node,
@@ -22,15 +42,11 @@ export function TreemapNode({
   h,
   depth,
   tint,
-}: {
-  node: TreeNode;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  depth: number;
-  tint: string | null;
-}) {
+  hoveredPath,
+  inputs,
+  outputs,
+  onHover,
+}: Props) {
   const style = {
     position: "absolute" as const,
     left: x,
@@ -40,27 +56,42 @@ export function TreemapNode({
   };
 
   if (node.kind === "file") {
+    const isHovered = hoveredPath === node.path;
+    const isInput = inputs.has(node.path);
+    const isOutput = outputs.has(node.path);
+    const isUnrelated =
+      hoveredPath !== null && !isHovered && !isInput && !isOutput;
+
+    const stateClass = isHovered
+      ? "tile-hovered"
+      : isInput
+        ? "tile-input"
+        : isOutput
+          ? "tile-output"
+          : isUnrelated
+            ? "tile-dim"
+            : "";
+
+    const showDescription = h >= DESC_MIN_HEIGHT && node.description;
+
     return (
       // data-path is the AgentOverlay contract — see components/AgentOverlay.tsx.
       // Removing or renaming it will break agent-icon anchoring.
       <article
         data-path={node.path}
         style={style}
-        className="relative overflow-hidden border border-zinc-300 bg-white/40"
+        onMouseEnter={() => onHover(node.path)}
+        onMouseLeave={() => onHover(null)}
+        className={`relative overflow-hidden border border-zinc-300 bg-white/40 transition-[opacity,background-color,border-color] duration-150 ${stateClass}`}
       >
         <header className="truncate border-b border-zinc-300 bg-white/30 px-2 py-1 text-[11px] text-zinc-600">
           {node.name}
         </header>
-        <ul className="flex flex-col">
-          {node.symbols.map((s, i) => (
-            <li
-              key={`${s.name}-${i}`}
-              className="border-b border-dotted border-zinc-400/60 last:border-b-0"
-            >
-              <SymbolRow symbol={s} />
-            </li>
-          ))}
-        </ul>
+        {showDescription && (
+          <p className="line-clamp-3 px-2 py-1.5 text-[11px] leading-snug text-zinc-700">
+            {node.description}
+          </p>
+        )}
       </article>
     );
   }
@@ -117,6 +148,10 @@ export function TreemapNode({
               h={r.h}
               depth={depth + 1}
               tint={childTint}
+              hoveredPath={hoveredPath}
+              inputs={inputs}
+              outputs={outputs}
+              onHover={onHover}
             />
           );
         })}

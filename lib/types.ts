@@ -1,3 +1,8 @@
+/**
+ * Shared types for the visualizer: the directory/file tree shape returned by
+ * the scanner, the SymbolKind discriminator that drives Glyph rendering, and
+ * the ActiveAgent record served by /api/agents.
+ */
 export type SymbolKind =
   | "component"
   | "route"
@@ -18,6 +23,9 @@ export type FileNode = {
   name: string;
   lines: number;
   symbols: SymbolNode[];
+  description?: string;
+  imports: string[];
+  importedBy: string[];
 };
 
 export type DirectoryNode = {

@@ -1,3 +1,9 @@
+/**
+ * Walks the project from the repo root and builds the directory/file tree the
+ * visualizer renders. Uses ts-morph to count lines, list exported symbols,
+ * parse the leading JSDoc header as a description, and resolve which other
+ * project files each file imports (and is imported by).
+ */
 import "server-only";
 import path from "node:path";
 import fg from "fast-glob";
@@ -30,10 +36,22 @@ export async function scanProject(
     dot: false,
   });
 
-  const project = new Project({ skipAddingFilesFromTsConfig: true });
+  // Load tsconfig so the resolver knows about path aliases (e.g. `@/*`),
+  // but skip auto-adding files — we control the file set ourselves via fast-glob.
+  const project = new Project({
+    tsConfigFilePath: path.join(root, "tsconfig.json"),
+    skipAddingFilesFromTsConfig: true,
+  });
   project.addSourceFilesAtPaths(files);
 
+  // absPath → relPath, used to resolve internal imports to project-relative paths.
+  const relByAbs = new Map<string, string>();
+  for (const sf of project.getSourceFiles()) {
+    relByAbs.set(sf.getFilePath(), path.relative(root, sf.getFilePath()));
+  }
+
   const fileNodes: FileNode[] = [];
+  const nodeByPath = new Map<string, FileNode>();
 
   for (const sf of project.getSourceFiles()) {
     const symbols: SymbolNode[] = [];
@@ -59,8 +77,40 @@ export async function scanProject(
     const relPath = path.relative(root, sf.getFilePath());
     const lines = Math.max(1, sf.getEndLineNumber());
     const name = path.basename(relPath);
+    const description = extractDescription(sf.getFullText());
 
-    fileNodes.push({ kind: "file", path: relPath, name, lines, symbols });
+    const imports: string[] = [];
+    const seenImports = new Set<string>();
+    for (const decl of sf.getImportDeclarations()) {
+      const target = decl.getModuleSpecifierSourceFile();
+      if (!target) continue; // external package or unresolved
+      const targetRel = relByAbs.get(target.getFilePath());
+      if (!targetRel || targetRel === relPath) continue;
+      if (seenImports.has(targetRel)) continue;
+      seenImports.add(targetRel);
+      imports.push(targetRel);
+    }
+
+    const node: FileNode = {
+      kind: "file",
+      path: relPath,
+      name,
+      lines,
+      symbols,
+      description,
+      imports,
+      importedBy: [],
+    };
+    fileNodes.push(node);
+    nodeByPath.set(relPath, node);
+  }
+
+  // Reverse the import graph to populate importedBy.
+  for (const node of fileNodes) {
+    for (const target of node.imports) {
+      const targetNode = nodeByPath.get(target);
+      if (targetNode) targetNode.importedBy.push(node.path);
+    }
   }
 
   const rootNode: DirectoryNode = {
@@ -112,6 +162,24 @@ export async function scanProject(
 
 function sizeOf(node: { kind: "file"; lines: number } | { kind: "directory"; totalLines: number }): number {
   return node.kind === "file" ? node.lines : node.totalLines;
+}
+
+// Pulls the leading /** ... */ block comment from a source file and turns it
+// into a single-paragraph description. Returns undefined if the file doesn't
+// open with a JSDoc-style header.
+function extractDescription(source: string): string | undefined {
+  const match = source.match(/^\s*\/\*\*([\s\S]*?)\*\//);
+  if (!match) return undefined;
+  const body = match[1]
+    .split("\n")
+    .map((line) => line.replace(/^\s*\*\s?/, "").trim())
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  // Drop anything from the first JSDoc tag onward (e.g. @param, @returns).
+  const beforeTag = body.split(/\s@\w/)[0].trim();
+  if (!beforeTag) return undefined;
+  return beforeTag.length > 240 ? beforeTag.slice(0, 237).trimEnd() + "…" : beforeTag;
 }
 
 export function countTree(node: DirectoryNode): {

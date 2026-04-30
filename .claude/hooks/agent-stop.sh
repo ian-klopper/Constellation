@@ -29,3 +29,10 @@ if jq --arg aid "$child_aid" '. + {agentId: $aid}' < "$target" > "$tmp" 2>/dev/n
 else
   rm -f "$tmp"
 fi
+
+output_file=$(printf '%s' "$input" | jq -r '.tool_response.outputFile // empty')
+cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
+if [ -n "$output_file" ]; then
+  nohup .claude/hooks/agent-watch.sh "$target" "$output_file" "$cwd" >/dev/null 2>&1 &
+  disown 2>/dev/null || true
+fi

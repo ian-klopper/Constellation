@@ -72,9 +72,7 @@ export function AgentOverlay() {
               style={{ width: ICON_SIZE, height: ICON_SIZE }}
             >
               <AgentIcon agent={a} />
-              {a.id !== "main" && a.kind !== "background" && (
-                <AgentBubble agent={a} />
-              )}
+              {a.id !== "main" && <AgentBubble agent={a} />}
             </div>
           </div>
         );
@@ -92,7 +90,7 @@ function AgentIcon({ agent }: { agent: ActiveAgent }) {
   const tooltip = isMain
     ? `Claude · ${agent.currentPath ?? "idle"}`
     : isBg
-      ? `${agent.subagent_type} (background) · ${agent.description}`
+      ? `${agent.subagent_type} (background) · ${agent.currentPath ?? agent.description}`
       : agent.currentPath
         ? `${agent.subagent_type} · ${agent.currentPath}`
         : `${agent.subagent_type} · ${agent.description}`;

@@ -13,18 +13,26 @@ export type SymbolNode = {
 };
 
 export type FileNode = {
+  kind: "file";
   path: string;
+  name: string;
+  lines: number;
   symbols: SymbolNode[];
 };
 
-export type DirectoryGroup = {
+export type DirectoryNode = {
+  kind: "directory";
+  path: string;
   name: string;
-  files: FileNode[];
+  children: TreeNode[];
+  totalLines: number;
 };
+
+export type TreeNode = FileNode | DirectoryNode;
 
 export type CodebaseTree = {
   root: string;
-  groups: DirectoryGroup[];
+  tree: DirectoryNode;
 };
 
 export type ActiveAgent = {

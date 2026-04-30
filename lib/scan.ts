@@ -5,7 +5,7 @@ import { Project } from "ts-morph";
 import { classify, nameFromDeclaration } from "./classify";
 import type {
   CodebaseTree,
-  DirectoryGroup,
+  DirectoryNode,
   FileNode,
   SymbolNode,
 } from "./types";
@@ -57,24 +57,82 @@ export async function scanProject(
     if (symbols.length === 0) continue;
 
     const relPath = path.relative(root, sf.getFilePath());
-    if (!relPath.includes(path.sep)) continue;
+    const lines = Math.max(1, sf.getEndLineNumber());
+    const name = path.basename(relPath);
 
-    fileNodes.push({ path: relPath, symbols });
+    fileNodes.push({ kind: "file", path: relPath, name, lines, symbols });
   }
 
-  const groupMap = new Map<string, FileNode[]>();
+  const rootNode: DirectoryNode = {
+    kind: "directory",
+    path: "",
+    name: "",
+    children: [],
+    totalLines: 0,
+  };
+  const dirByPath = new Map<string, DirectoryNode>();
+  dirByPath.set("", rootNode);
+
   for (const file of fileNodes) {
-    const top = file.path.split(path.sep)[0];
-    if (!groupMap.has(top)) groupMap.set(top, []);
-    groupMap.get(top)!.push(file);
+    const segments = file.path.split(/[\\/]/);
+    let parent = rootNode;
+    for (let i = 0; i < segments.length - 1; i++) {
+      const dirPath = segments.slice(0, i + 1).join("/");
+      let dir = dirByPath.get(dirPath);
+      if (!dir) {
+        dir = {
+          kind: "directory",
+          path: dirPath,
+          name: segments[i],
+          children: [],
+          totalLines: 0,
+        };
+        dirByPath.set(dirPath, dir);
+        parent.children.push(dir);
+      }
+      parent = dir;
+    }
+    parent.children.push(file);
   }
 
-  const groups: DirectoryGroup[] = Array.from(groupMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, files]) => ({
-      name,
-      files: files.sort((a, b) => a.path.localeCompare(b.path)),
-    }));
+  // Post-order: sum totalLines and sort children by size descending.
+  function finalize(node: DirectoryNode): number {
+    let total = 0;
+    for (const child of node.children) {
+      total += child.kind === "file" ? child.lines : finalize(child);
+    }
+    node.totalLines = total;
+    node.children.sort((a, b) => sizeOf(b) - sizeOf(a));
+    return total;
+  }
+  finalize(rootNode);
 
-  return { root, groups };
+  return { root, tree: rootNode };
+}
+
+function sizeOf(node: { kind: "file"; lines: number } | { kind: "directory"; totalLines: number }): number {
+  return node.kind === "file" ? node.lines : node.totalLines;
+}
+
+export function countTree(node: DirectoryNode): {
+  dirs: number;
+  files: number;
+  lines: number;
+} {
+  let dirs = 0;
+  let files = 0;
+  let lines = 0;
+  function walk(n: DirectoryNode) {
+    for (const child of n.children) {
+      if (child.kind === "file") {
+        files++;
+        lines += child.lines;
+      } else {
+        dirs++;
+        walk(child);
+      }
+    }
+  }
+  walk(node);
+  return { dirs, files, lines };
 }

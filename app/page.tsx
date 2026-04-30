@@ -1,18 +1,21 @@
-import { scanProject } from "@/lib/scan";
+import { scanProject, countTree } from "@/lib/scan";
 import { Visualizer } from "@/components/Visualizer";
 import { ActiveAgents } from "@/components/ActiveAgents";
 import { AgentOverlay } from "@/components/AgentOverlay";
 
 export default async function HomePage() {
   const tree = await scanProject();
+  const stats = countTree(tree.tree);
   return (
-    <main>
+    <main className="flex h-screen flex-col">
       <header className="border-b border-zinc-200 px-6 py-3 text-[11px] uppercase tracking-wider text-zinc-500">
-        Constellation — {tree.groups.length} directories,{" "}
-        {tree.groups.reduce((n, g) => n + g.files.length, 0)} files
+        Constellation — {stats.dirs} directories, {stats.files} files,{" "}
+        {stats.lines} lines
       </header>
       <ActiveAgents />
-      <Visualizer tree={tree} />
+      <div className="min-h-0 flex-1">
+        <Visualizer tree={tree} />
+      </div>
       <AgentOverlay />
     </main>
   );

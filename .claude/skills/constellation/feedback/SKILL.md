@@ -5,7 +5,7 @@ description: File a labeled GitHub issue against the Constellation public repo d
 
 # constellation:feedback
 
-File one issue against `ian-klopper/Constellation` describing what the user said is broken or confusing. One issue per invocation — if the user describes two unrelated problems, ask them to invoke twice. Privacy is a positive allowlist: only the fields enumerated below ever go in the issue. No transcript content, no file contents, no environment variables, no `$HOME`, no absolute paths. Repo identity is `basename "$PWD"`, never the full path. Never run `gh auth login` for the user.
+File one issue against `ian-klopper/Constellation` describing what the user said is broken or confusing. One issue per invocation. Multiple findings from the same workflow or session can be combined into a single issue when they share root cause, surface area, or were discovered together — render them as a checklist in the body. Two unrelated problems still need two invocations: ask the user to re-invoke for the second. Privacy is a positive allowlist: only the fields enumerated below ever go in the issue. No transcript content, no file contents, no environment variables, no `$HOME`, no absolute paths. Repo identity is `basename "$PWD"`, never the full path. Never run `gh auth login` for the user.
 
 ## Context to gather
 
@@ -59,20 +59,21 @@ Anything other than literal `y` or `yes` exits cleanly with `Cancelled — no is
 
 ## Submit
 
-On confirmation:
+On confirmation, write the body to a tempfile and pass it to `gh` via `--body-file`. The quoted heredoc delimiter (`'BODY_EOF'`) is what keeps backticks, fenced code blocks, dollar signs, and embedded newlines intact — process substitution + `echo` mangles all of these. The `[via:dogfood]` prefix already in the title is the searchable signal; we deliberately don't pass `--label`, because non-collaborators can't make `gh` accept custom labels and the whole `gh issue create` call fails when the label doesn't exist.
+
+    body_tmp="$(mktemp -t constellation-feedback)"
+    trap 'rm -f "$body_tmp"' EXIT
+    cat > "$body_tmp" <<'BODY_EOF'
+    <body>
+    BODY_EOF
 
     gh issue create \
       --repo ian-klopper/Constellation \
-      --label via:dogfood \
       --title "<title>" \
-      --body-file <(echo "<body>")
+      --body-file "$body_tmp"
 
-Then verify the label landed:
-
-    gh issue view <number> --repo ian-klopper/Constellation --json labels --jq '.labels[].name'
-
-If `via:dogfood` is missing from the returned labels, print that the issue was filed at `<url>` but the label was dropped (the user isn't a collaborator, so custom labels were ignored — triage may take longer; the issue itself is fine). Otherwise print `Filed: <url>`.
+Print `Filed: <url>`.
 
 ## `gh` failures
 
-In every failure case, print the rendered draft so the user has it to paste manually — they never lose what they wrote. Specifically: if `gh` isn't on PATH, hint them to install it (`https://cli.github.com/`); if `gh auth status` fails, hint them to run `gh auth login` and re-invoke; if `gh issue create` fails for any other reason (network, repo missing, rate limit), print the error verbatim and the draft. Exit non-zero in every failure case.
+In every failure case, print the rendered draft so the user has it to paste manually — they never lose what they wrote. Specifically: if `gh` isn't found, also try `/opt/homebrew/bin/gh` (Apple Silicon Homebrew) and `/usr/local/bin/gh` (Intel Homebrew) — `command -v gh` fails when Homebrew's bin dir isn't on the PATH inherited by the agent, which is common on macOS. If one of those exists, use the absolute path for the rest of this skill. Only when all three lookups fail do you hint the user to install from `https://cli.github.com/`. If `gh auth status` fails, hint them to run `gh auth login` and re-invoke; if `gh issue create` fails for any other reason (network, repo missing, rate limit), print the error verbatim and the draft. Exit non-zero in every failure case.

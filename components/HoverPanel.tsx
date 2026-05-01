@@ -131,7 +131,7 @@ export function HoverPanel({
           ×
         </button>
       )}
-      <div className="mb-1 pr-6 text-[10px] uppercase tracking-[0.15em] text-zinc-500">
+      <div className="mb-1 break-all pr-6 text-[10px] uppercase tracking-[0.15em] text-zinc-500">
         {file.path}
       </div>
       <div className="mb-2 text-[12px] font-medium text-zinc-900">
@@ -195,7 +195,7 @@ function PathList({
   return (
     <ul className="flex flex-col gap-0.5">
       {paths.map((p) => (
-        <li key={p} className="truncate text-[11px] text-zinc-700">
+        <li key={p} className="break-all text-[11px] text-zinc-700">
           {p}
         </li>
       ))}

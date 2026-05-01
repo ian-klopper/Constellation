@@ -191,8 +191,16 @@ function FileTile({
       }}
       className={`relative overflow-hidden border border-zinc-300 bg-white/40 transition-[opacity,background-color,border-color] duration-150 ${stateClass}`}
     >
-      <header className="truncate border-b border-zinc-300 bg-white/30 px-2 py-1 text-[11px] text-zinc-600">
-        {node.name}
+      <header
+        // Pin the header to exactly FILE_TILE_HEADER_HEIGHT so the line-clamp
+        // math `(h - HEADER - PADDING_Y) / LINE_HEIGHT` is precise. Without
+        // this, the rendered height drifts with font / inherited line-height
+        // and the description's last line (including its ellipsis) is clipped
+        // by overflow-hidden on the article.
+        style={{ height: FILE_TILE_HEADER_HEIGHT }}
+        className="flex shrink-0 items-center border-b border-zinc-300 bg-white/30 px-2 text-[11px] text-zinc-600"
+      >
+        <span className="min-w-0 truncate">{node.name}</span>
       </header>
       {showDescription && (
         <p

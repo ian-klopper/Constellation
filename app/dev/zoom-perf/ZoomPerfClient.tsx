@@ -21,6 +21,10 @@ import {
   HoverContext,
   type HoverContextValue,
 } from "@/components/HoverContext";
+import {
+  ZoomPanContext,
+  type ZoomPanContextValue,
+} from "@/components/ZoomPanContext";
 import type { CodebaseTree } from "@/lib/types";
 
 // Tunables — keep in sync with constants Unit 3 will add to lib/constants.ts.
@@ -188,6 +192,18 @@ export function ZoomPerfClient({ tree }: { tree: CodebaseTree }) {
     [panelHoveredRef],
   );
 
+  // Stub ZoomPanContext: committedZoom pinned at 1 so LOD never culls
+  // tiles (worst-case load — the whole point of the bench). The live
+  // transform is mutated imperatively above; nothing here subscribes.
+  const zoomPanValue = useMemo<ZoomPanContextValue>(
+    () => ({
+      committedZoom: 1,
+      getLive: () => liveRef.current,
+      subscribeTransformChange: () => () => {},
+    }),
+    [],
+  );
+
   return (
     <main className="flex h-screen flex-col">
       <header className="flex items-center justify-between gap-4 border-b border-zinc-200 px-6 py-3 text-[11px] uppercase tracking-wider text-zinc-500">
@@ -197,33 +213,35 @@ export function ZoomPerfClient({ tree }: { tree: CodebaseTree }) {
       <div className="min-h-0 flex-1">
         <HoverContext.Provider value={hoverValue}>
           <TileRegistryProvider>
-            <div
-              ref={containerRef}
-              className="relative h-full w-full overflow-hidden"
-              style={{ touchAction: "none" }}
-            >
+            <ZoomPanContext.Provider value={zoomPanValue}>
               <div
-                ref={wrapperRef}
-                style={{
-                  transformOrigin: "0 0",
-                  width: size?.w ?? 0,
-                  height: size?.h ?? 0,
-                  position: "relative",
-                }}
+                ref={containerRef}
+                className="relative h-full w-full overflow-hidden"
+                style={{ touchAction: "none" }}
               >
-                {size && size.w > 0 && size.h > 0 && (
-                  <TreemapNode
-                    node={tree.tree}
-                    x={0}
-                    y={0}
-                    w={size.w}
-                    h={size.h}
-                    depth={0}
-                    tint={null}
-                  />
-                )}
+                <div
+                  ref={wrapperRef}
+                  style={{
+                    transformOrigin: "0 0",
+                    width: size?.w ?? 0,
+                    height: size?.h ?? 0,
+                    position: "relative",
+                  }}
+                >
+                  {size && size.w > 0 && size.h > 0 && (
+                    <TreemapNode
+                      node={tree.tree}
+                      x={0}
+                      y={0}
+                      w={size.w}
+                      h={size.h}
+                      depth={0}
+                      tint={null}
+                    />
+                  )}
+                </div>
               </div>
-            </div>
+            </ZoomPanContext.Provider>
           </TileRegistryProvider>
         </HoverContext.Provider>
       </div>

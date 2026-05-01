@@ -13,6 +13,7 @@ import { squarify } from "@/lib/treemap";
 import { TREEMAP } from "@/lib/constants";
 import { useHover } from "./HoverContext";
 import { useRegisterTile } from "./TileRegistry";
+import { useZoomPan } from "./ZoomPanContext";
 import type { TreeNode } from "@/lib/types";
 
 const {
@@ -37,6 +38,12 @@ type Props = {
 };
 
 export function TreemapNode({ node, x, y, w, h, depth, tint }: Props) {
+  // committedZoom is React state — updates only on LOD_COMMIT_QUANTUM
+  // crossings, so this hook does NOT cause per-detent reconciliation. Do
+  // *not* swap to getLive().zoom: the whole point of the ref-driven
+  // architecture is to keep continuous zoom values out of TreemapNode.
+  const { committedZoom } = useZoomPan();
+
   const style = {
     position: "absolute" as const,
     left: x,
@@ -65,8 +72,23 @@ export function TreemapNode({ node, x, y, w, h, depth, tint }: Props) {
         h: h - LABEL_HEIGHT - 2 * INNER_PAD,
       };
 
+  // Zoom-aware gate: as the user zooms in, more children clear MIN_RENDER
+  // and become visible; zooming out culls them. At zoom=1 the gate is
+  // identical to the legacy `inner.w >= MIN_RENDER` check, so the home
+  // page is pixel-identical to the pre-zoom version on first load.
+  // Hidden children's area is silently absorbed by the parent — the
+  // directory background fills the gap (no "+N hidden" placeholder).
+  //
+  // Description line-clamp math (in FileTile below) intentionally stays
+  // in *layout-px*, not zoom-aware px. Zooming scales the rendered text
+  // but the *number* of lines stays constant; full zoom-aware line-count
+  // is a deferred follow-up.
+  const renderW = inner.w * committedZoom;
+  const renderH = inner.h * committedZoom;
   const canRender =
-    inner.w >= MIN_RENDER && inner.h >= MIN_RENDER && node.children.length > 0;
+    renderW >= MIN_RENDER &&
+    renderH >= MIN_RENDER &&
+    node.children.length > 0;
 
   // Memoize squarify on the actually-changing inputs: the children array's
   // *reference* (stable for a given tree, busts only when the scan re-runs)

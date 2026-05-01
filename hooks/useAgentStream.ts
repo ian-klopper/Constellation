@@ -1,19 +1,22 @@
 /**
- * Subscribes to /api/agents/stream (SSE), returns the latest snapshot.
- * Falls back to a single /api/agents poll if the EventSource fails — so
- * the overlay still shows something when the daemon is down. Reconnects
- * with exponential backoff (capped at 10s) when the connection drops.
+ * Subscribes to /api/agents/stream (SSE), returns the latest snapshot
+ * of { agents, repos }. Falls back to a single /api/agents poll if the
+ * EventSource fails — so the overlay still shows something when the
+ * daemon is down. Reconnects with exponential backoff (capped at 10s)
+ * when the connection drops.
  */
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ActiveAgent } from "@/lib/types";
+import type { ActiveAgent, AgentsPayload, RepoSummary } from "@/lib/types";
 
 const INITIAL_BACKOFF_MS = 500;
 const MAX_BACKOFF_MS = 10_000;
 
-export function useAgentStream(): ActiveAgent[] {
-  const [snapshot, setSnapshot] = useState<ActiveAgent[]>([]);
+const EMPTY: AgentsPayload = { agents: [], repos: [] };
+
+export function useAgentStream(): AgentsPayload {
+  const [snapshot, setSnapshot] = useState<AgentsPayload>(EMPTY);
 
   useEffect(() => {
     let cancelled = false;
@@ -23,8 +26,9 @@ export function useAgentStream(): ActiveAgent[] {
 
     const handleSnapshotEvent = (e: MessageEvent) => {
       try {
-        const data = JSON.parse(e.data) as ActiveAgent[];
-        if (!cancelled) setSnapshot(data);
+        const data = JSON.parse(e.data) as Partial<AgentsPayload>;
+        if (cancelled) return;
+        setSnapshot(normalize(data));
         backoff = INITIAL_BACKOFF_MS; // healthy stream resets backoff
       } catch {
         // ignore malformed messages
@@ -35,8 +39,8 @@ export function useAgentStream(): ActiveAgent[] {
       try {
         const res = await fetch("/api/agents", { cache: "no-store" });
         if (!res.ok) return;
-        const json = (await res.json()) as { agents: ActiveAgent[] };
-        if (!cancelled) setSnapshot(json.agents);
+        const json = (await res.json()) as Partial<AgentsPayload>;
+        if (!cancelled) setSnapshot(normalize(json));
       } catch {
         // ignore
       }
@@ -68,4 +72,10 @@ export function useAgentStream(): ActiveAgent[] {
   }, []);
 
   return snapshot;
+}
+
+function normalize(data: Partial<AgentsPayload>): AgentsPayload {
+  const agents: ActiveAgent[] = Array.isArray(data.agents) ? data.agents : [];
+  const repos: RepoSummary[] = Array.isArray(data.repos) ? data.repos : [];
+  return { agents, repos };
 }

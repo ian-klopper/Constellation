@@ -4,13 +4,22 @@
  * plagued the bash hooks dies: one Node event loop, one applyEvent
  * reducer, no concurrent file writes possible.
  *
+ * State is namespaced by (sessionId, id) so two parallel Claude Code
+ * sessions in the same repo each get their own "main" without colliding,
+ * and so multi-repo viewers can filter agents by their owning cwd.
+ *
  * After every mutation, schedules a debounced disk write (so the legacy
  * /api/agents polling endpoint keeps working) and broadcasts the new
  * snapshot to SSE subscribers.
  */
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import type { ActiveAgent } from "@/lib/types";
+import {
+  ActiveAgentSchema,
+  type ActiveAgent,
+  type AgentsPayload,
+  type RepoSummary,
+} from "@/lib/types";
 import type { DiskSync } from "./disk-sync";
 import type { SseBroker } from "./sse";
 import { formatActivity, type ToolInput } from "./activity";
@@ -18,6 +27,8 @@ import { formatActivity, type ToolInput } from "./activity";
 export type LifecycleEvent =
   | {
       type: "agent-start";
+      sessionId: string;
+      cwd: string;
       tool_use_id: string;
       subagent_type?: string;
       description?: string;
@@ -25,40 +36,60 @@ export type LifecycleEvent =
     }
   | {
       type: "agent-stop";
+      sessionId: string;
+      cwd: string;
       tool_use_id: string;
       agentId?: string; // background spawn returns child agentId
       output_file?: string;
       transcript_path?: string;
-      cwd?: string;
     }
-  | { type: "subagent-stop"; agent_id: string }
+  | {
+      type: "subagent-stop";
+      sessionId: string;
+      cwd: string;
+      agent_id: string;
+    }
   | {
       type: "touch";
+      sessionId: string;
+      cwd: string;
       agent_id?: string;
       agent_type?: string;
       tool_name?: string;
       tool_input?: ToolInput;
-      cwd?: string;
       transcript_path?: string;
     }
   | {
       type: "idle";
+      sessionId: string;
+      cwd: string;
       agent_id?: string;
       hook_event_name?: string;
     }
-  | { type: "session-start" };
+  | { type: "session-start"; sessionId: string; cwd: string };
+
+export type SessionInfo = {
+  sessionId: string;
+  cwd: string;
+  repoName: string;
+  startedAt: number;
+  lastActiveAt: number;
+  agentCount: number;
+};
 
 type LifecycleHooks = {
   onBackgroundTranscript?: (
-    targetId: string,
+    targetKey: string,
     transcriptPath: string,
     cwd: string,
   ) => void;
-  onMainTranscript?: (transcriptPath: string) => void;
-  stopWatchersFor?: (id: string) => void;
+  onMainTranscript?: (sessionId: string, transcriptPath: string) => void;
+  stopWatchersFor?: (targetKey: string) => void;
 };
 
 export class Lifecycle {
+  // Keyed by `${sessionId}:${id}` — the composite makes "main" unique per
+  // session, and lookups can scope by sessionId without a nested map.
   private agents = new Map<string, ActiveAgent>();
 
   constructor(
@@ -84,10 +115,10 @@ export class Lifecycle {
       if (!name.endsWith(".json")) continue;
       try {
         const raw = await fs.readFile(path.join(stateDir, name), "utf8");
-        const a = JSON.parse(raw) as ActiveAgent;
-        if (typeof a.id === "string" && typeof a.startedAt === "number") {
-          this.agents.set(a.id, a);
-        }
+        const parsed = ActiveAgentSchema.safeParse(JSON.parse(raw));
+        if (!parsed.success) continue; // skip pre-multi-repo-format files
+        const a = parsed.data;
+        this.agents.set(keyFor(a.sessionId, a.id), a);
       } catch {
         // skip malformed
       }
@@ -98,6 +129,64 @@ export class Lifecycle {
     return Array.from(this.agents.values()).sort(
       (a, b) => a.startedAt - b.startedAt,
     );
+  }
+
+  payload(): AgentsPayload {
+    return { agents: this.snapshot(), repos: this.repos() };
+  }
+
+  sessions(): SessionInfo[] {
+    const bySession = new Map<string, SessionInfo>();
+    for (const a of this.agents.values()) {
+      const cur = bySession.get(a.sessionId);
+      if (!cur) {
+        bySession.set(a.sessionId, {
+          sessionId: a.sessionId,
+          cwd: a.cwd,
+          repoName: path.basename(a.cwd) || a.cwd,
+          startedAt: a.startedAt,
+          lastActiveAt: a.lastActiveAt ?? a.startedAt,
+          agentCount: 1,
+        });
+      } else {
+        cur.startedAt = Math.min(cur.startedAt, a.startedAt);
+        cur.lastActiveAt = Math.max(
+          cur.lastActiveAt,
+          a.lastActiveAt ?? a.startedAt,
+        );
+        cur.agentCount += 1;
+      }
+    }
+    return Array.from(bySession.values()).sort(
+      (a, b) => b.lastActiveAt - a.lastActiveAt,
+    );
+  }
+
+  repos(): RepoSummary[] {
+    const byRepo = new Map<string, RepoSummary & { sessions: Set<string> }>();
+    for (const a of this.agents.values()) {
+      if (!a.cwd) continue;
+      const cur = byRepo.get(a.cwd);
+      const last = a.lastActiveAt ?? a.startedAt;
+      if (!cur) {
+        byRepo.set(a.cwd, {
+          repoPath: a.cwd,
+          repoName: path.basename(a.cwd) || a.cwd,
+          sessionCount: 1,
+          agentCount: 1,
+          lastActiveAt: last,
+          sessions: new Set([a.sessionId]),
+        });
+      } else {
+        cur.agentCount += 1;
+        cur.sessions.add(a.sessionId);
+        cur.sessionCount = cur.sessions.size;
+        cur.lastActiveAt = Math.max(cur.lastActiveAt, last);
+      }
+    }
+    return Array.from(byRepo.values())
+      .map(({ sessions: _sessions, ...rest }) => rest)
+      .sort((a, b) => b.lastActiveAt - a.lastActiveAt);
   }
 
   applyEvent(event: LifecycleEvent): void {
@@ -118,10 +207,10 @@ export class Lifecycle {
         this.handleIdle(event);
         break;
       case "session-start":
-        this.handleSessionStart();
+        this.handleSessionStart(event);
         break;
     }
-    this.sse.broadcast(this.snapshot());
+    this.broadcast();
   }
 
   private handleAgentStart(
@@ -130,48 +219,48 @@ export class Lifecycle {
     const now = nowSeconds();
     const agent: ActiveAgent = {
       id: e.tool_use_id,
+      sessionId: e.sessionId,
+      cwd: e.cwd,
       subagent_type: e.subagent_type ?? "unknown",
       description: e.description ?? "",
       startedAt: now,
       lastActiveAt: now,
       kind: e.run_in_background ? "background" : "foreground",
     };
-    this.agents.set(agent.id, agent);
+    this.agents.set(keyFor(agent.sessionId, agent.id), agent);
     this.disk.scheduleWrite(agent);
   }
 
   private handleAgentStop(
     e: Extract<LifecycleEvent, { type: "agent-stop" }>,
   ): void {
-    const agent = this.agents.get(e.tool_use_id);
+    const key = keyFor(e.sessionId, e.tool_use_id);
+    const agent = this.agents.get(key);
     if (!agent) return;
     if (agent.kind === "foreground") {
-      this.removeAgent(agent.id);
+      this.removeAgent(key);
       return;
     }
     // Background: record the child's agentId, leave the file in place.
     // SubagentStop will clean up later via agentId match.
     if (e.agentId) {
       const updated = { ...agent, agentId: e.agentId };
-      this.agents.set(updated.id, updated);
+      this.agents.set(key, updated);
       this.disk.scheduleWrite(updated);
     }
     if (e.output_file && e.transcript_path && this.hooks.onBackgroundTranscript) {
-      this.hooks.onBackgroundTranscript(
-        agent.id,
-        e.output_file,
-        e.cwd ?? "",
-      );
+      this.hooks.onBackgroundTranscript(key, e.output_file, agent.cwd);
     }
   }
 
   private handleSubagentStop(
     e: Extract<LifecycleEvent, { type: "subagent-stop" }>,
   ): void {
-    for (const [id, agent] of this.agents) {
-      if (id === "main") continue;
+    for (const [key, agent] of this.agents) {
+      if (agent.sessionId !== e.sessionId) continue;
+      if (agent.id === "main") continue;
       if (agent.agentId === e.agent_id) {
-        this.removeAgent(id);
+        this.removeAgent(key);
         return;
       }
     }
@@ -192,6 +281,8 @@ export class Lifecycle {
 
     if (!e.agent_id) {
       this.upsertMain({
+        sessionId: e.sessionId,
+        cwd: e.cwd,
         activity,
         filePath,
         transcriptPath: e.transcript_path,
@@ -199,9 +290,9 @@ export class Lifecycle {
       return;
     }
 
-    let agent = this.findByAgentId(e.agent_id);
+    let agent = this.findByAgentId(e.sessionId, e.agent_id);
     if (!agent) {
-      agent = this.findOldestUnbound(e.agent_type);
+      agent = this.findOldestUnbound(e.sessionId, e.agent_type);
       if (agent) {
         agent.agentId = e.agent_id;
       }
@@ -216,21 +307,26 @@ export class Lifecycle {
     if (activity) updated.currentActivity = activity;
     if (filePath) updated.currentPath = filePath;
 
-    this.agents.set(updated.id, updated);
+    this.agents.set(keyFor(updated.sessionId, updated.id), updated);
     this.disk.scheduleWrite(updated);
   }
 
   private upsertMain(opts: {
+    sessionId: string;
+    cwd: string;
     activity: string;
     filePath: string;
     transcriptPath?: string;
   }): void {
     const now = nowSeconds();
-    const existing = this.agents.get("main");
+    const key = keyFor(opts.sessionId, "main");
+    const existing = this.agents.get(key);
     const next: ActiveAgent = existing
-      ? { ...existing, status: "active", lastActiveAt: now }
+      ? { ...existing, status: "active", lastActiveAt: now, cwd: opts.cwd || existing.cwd }
       : {
           id: "main",
+          sessionId: opts.sessionId,
+          cwd: opts.cwd,
           subagent_type: "main",
           description: "Claude (main)",
           startedAt: now,
@@ -240,93 +336,119 @@ export class Lifecycle {
     if (opts.activity) next.currentActivity = opts.activity;
     if (opts.filePath) next.currentPath = opts.filePath;
 
-    this.agents.set("main", next);
+    this.agents.set(key, next);
     this.disk.scheduleWrite(next);
 
     if (opts.transcriptPath && this.hooks.onMainTranscript) {
-      this.hooks.onMainTranscript(opts.transcriptPath);
+      this.hooks.onMainTranscript(opts.sessionId, opts.transcriptPath);
     }
   }
 
   private handleIdle(e: Extract<LifecycleEvent, { type: "idle" }>): void {
     const now = nowSeconds();
     if (!e.agent_id || e.hook_event_name === "Stop") {
-      const main = this.agents.get("main");
+      const key = keyFor(e.sessionId, "main");
+      const main = this.agents.get(key);
       if (main) {
         const updated = { ...main, status: "idle" as const, lastActiveAt: now };
-        this.agents.set("main", updated);
+        this.agents.set(key, updated);
         this.disk.scheduleWrite(updated);
       }
       return;
     }
-    const agent = this.findByAgentId(e.agent_id);
+    const agent = this.findByAgentId(e.sessionId, e.agent_id);
     if (!agent) return;
     const updated = { ...agent, status: "idle" as const, lastActiveAt: now };
-    this.agents.set(updated.id, updated);
+    this.agents.set(keyFor(updated.sessionId, updated.id), updated);
     this.disk.scheduleWrite(updated);
   }
 
-  private handleSessionStart(): void {
-    for (const id of this.agents.keys()) {
-      this.disk.scheduleDelete(id);
-      this.hooks.stopWatchersFor?.(id);
+  private handleSessionStart(
+    e: Extract<LifecycleEvent, { type: "session-start" }>,
+  ): void {
+    // Clear ONLY this session's agents — other sessions in other repos (or
+    // other sessions in the same repo) keep their state.
+    for (const [key, agent] of this.agents) {
+      if (agent.sessionId !== e.sessionId) continue;
+      this.disk.scheduleDelete(agent);
+      this.hooks.stopWatchersFor?.(key);
+      this.agents.delete(key);
     }
-    this.agents.clear();
   }
 
   /** Called by transcript watchers — same single-writer guarantee. */
   applyTranscriptUpdate(
-    targetId: string,
+    targetKey: string,
     fields: Partial<ActiveAgent>,
   ): void {
-    const agent = this.agents.get(targetId);
+    const agent = this.agents.get(targetKey);
     if (!agent) return;
     const updated = { ...agent, ...fields, lastActiveAt: nowSeconds() };
-    this.agents.set(targetId, updated);
+    this.agents.set(targetKey, updated);
     this.disk.scheduleWrite(updated);
-    this.sse.broadcast(this.snapshot());
+    this.broadcast();
   }
 
   /** Same single-writer for transcript-driven idle flips. */
-  markIdleIfPresent(targetId: string): void {
-    const agent = this.agents.get(targetId);
+  markIdleIfPresent(targetKey: string): void {
+    const agent = this.agents.get(targetKey);
     if (!agent || agent.status === "idle") return;
     const updated = { ...agent, status: "idle" as const };
-    this.agents.set(targetId, updated);
+    this.agents.set(targetKey, updated);
     this.disk.scheduleWrite(updated);
-    this.sse.broadcast(this.snapshot());
+    this.broadcast();
   }
 
-  has(id: string): boolean {
-    return this.agents.has(id);
+  has(targetKey: string): boolean {
+    return this.agents.has(targetKey);
   }
 
-  private removeAgent(id: string): void {
-    this.agents.delete(id);
-    this.disk.scheduleDelete(id);
-    this.hooks.stopWatchersFor?.(id);
+  /** Composite key for transcripts.ts to compose when needed. */
+  static key(sessionId: string, id: string): string {
+    return keyFor(sessionId, id);
   }
 
-  private findByAgentId(agentId: string): ActiveAgent | undefined {
-    for (const [id, a] of this.agents) {
-      if (id === "main") continue;
+  private removeAgent(key: string): void {
+    const agent = this.agents.get(key);
+    this.agents.delete(key);
+    if (agent) this.disk.scheduleDelete(agent);
+    this.hooks.stopWatchersFor?.(key);
+  }
+
+  private findByAgentId(
+    sessionId: string,
+    agentId: string,
+  ): ActiveAgent | undefined {
+    for (const a of this.agents.values()) {
+      if (a.sessionId !== sessionId) continue;
+      if (a.id === "main") continue;
       if (a.agentId === agentId) return a;
     }
     return undefined;
   }
 
   private findOldestUnbound(
+    sessionId: string,
     subagentType: string | undefined,
   ): ActiveAgent | undefined {
     let oldest: ActiveAgent | undefined;
-    for (const [id, a] of this.agents) {
-      if (id === "main") continue;
+    for (const a of this.agents.values()) {
+      if (a.sessionId !== sessionId) continue;
+      if (a.id === "main") continue;
       if (a.agentId) continue;
       if (subagentType && a.subagent_type !== subagentType) continue;
       if (!oldest || a.startedAt < oldest.startedAt) oldest = a;
     }
     return oldest;
   }
+
+  private broadcast(): void {
+    this.sse.broadcast(this.payload());
+  }
+}
+
+function keyFor(sessionId: string, id: string): string {
+  return `${sessionId}:${id}`;
 }
 
 function nowSeconds(): number {

@@ -59,12 +59,24 @@ async function route(
 
   if (route === "GET /agents") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ agents: lifecycle.snapshot() }));
+    res.end(JSON.stringify(lifecycle.payload()));
     return;
   }
 
   if (route === "GET /agents/stream") {
-    sse.add(res, lifecycle.snapshot());
+    sse.add(res, lifecycle.payload());
+    return;
+  }
+
+  if (route === "GET /sessions") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ sessions: lifecycle.sessions() }));
+    return;
+  }
+
+  if (route === "GET /repos") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ repos: lifecycle.repos() }));
     return;
   }
 
@@ -89,10 +101,23 @@ function mapEvent(
   name: string,
   payload: Record<string, unknown>,
 ): LifecycleEvent | null {
+  // session_id and cwd ride on every Claude Code hook stdin payload — pull
+  // them out once and tag every event so the lifecycle reducer can
+  // namespace state by (sessionId, agentId) and so each agent carries its
+  // owning repo path for the frontend to filter on.
+  const sessionId = str(payload.session_id);
+  const cwd = str(payload.cwd);
+  if (!sessionId) {
+    // No session_id ⇒ not a real Claude Code event. Defensive: reject so a
+    // stray request doesn't end up as an unowned agent.
+    return null;
+  }
   switch (name) {
     case "agent-start":
       return {
         type: "agent-start",
+        sessionId,
+        cwd,
         tool_use_id: str(payload.tool_use_id),
         subagent_type: pickStr(payload, ["tool_input", "subagent_type"]),
         description: pickStr(payload, ["tool_input", "description"]),
@@ -102,36 +127,42 @@ function mapEvent(
     case "agent-stop":
       return {
         type: "agent-stop",
+        sessionId,
+        cwd,
         tool_use_id: str(payload.tool_use_id),
         agentId: pickStr(payload, ["tool_response", "agentId"]) || undefined,
         output_file:
           pickStr(payload, ["tool_response", "outputFile"]) || undefined,
         transcript_path: str(payload.transcript_path) || undefined,
-        cwd: str(payload.cwd) || undefined,
       };
     case "subagent-stop":
       return {
         type: "subagent-stop",
+        sessionId,
+        cwd,
         agent_id: str(payload.agent_id),
       };
     case "touch":
       return {
         type: "touch",
+        sessionId,
+        cwd,
         agent_id: str(payload.agent_id) || undefined,
         agent_type: str(payload.agent_type) || undefined,
         tool_name: str(payload.tool_name) || undefined,
         tool_input: (payload.tool_input ?? null) as Record<string, unknown> | null,
-        cwd: str(payload.cwd) || undefined,
         transcript_path: str(payload.transcript_path) || undefined,
       };
     case "idle":
       return {
         type: "idle",
+        sessionId,
+        cwd,
         agent_id: str(payload.agent_id) || undefined,
         hook_event_name: str(payload.hook_event_name) || undefined,
       };
     case "session-start":
-      return { type: "session-start" };
+      return { type: "session-start", sessionId, cwd };
     default:
       return null;
   }

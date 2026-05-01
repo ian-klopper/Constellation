@@ -1,17 +1,21 @@
 /**
- * Coalesces rapid lifecycle mutations into one disk write per id. Keeps
- * the on-disk JSON files current for the legacy /api/agents fallback
- * without thrashing the filesystem when the touch hook fires every
- * tool call.
+ * Coalesces rapid lifecycle mutations into one disk write per (session,
+ * agent). Keeps the on-disk JSON files current for the legacy /api/agents
+ * fallback without thrashing the filesystem when the touch hook fires
+ * every tool call.
  */
 import type { ActiveAgent } from "@/lib/types";
-import { removeAgentFile, writeAgentFile } from "./atomic-write";
+import {
+  fileNameFor,
+  removeAgentFile,
+  writeAgentFile,
+} from "./atomic-write";
 
 const FLUSH_DELAY_MS = 50;
 
 type PendingWrite =
   | { kind: "write"; agent: ActiveAgent }
-  | { kind: "delete" };
+  | { kind: "delete"; sessionId: string; id: string };
 
 export class DiskSync {
   private timers = new Map<string, NodeJS.Timeout>();
@@ -20,45 +24,51 @@ export class DiskSync {
   constructor(private stateDir: string) {}
 
   scheduleWrite(agent: ActiveAgent): void {
-    this.pending.set(agent.id, { kind: "write", agent });
-    this.schedule(agent.id);
+    const key = fileNameFor(agent.sessionId, agent.id);
+    this.pending.set(key, { kind: "write", agent });
+    this.schedule(key);
   }
 
-  scheduleDelete(id: string): void {
-    this.pending.set(id, { kind: "delete" });
-    this.schedule(id);
+  scheduleDelete(agent: ActiveAgent): void {
+    const key = fileNameFor(agent.sessionId, agent.id);
+    this.pending.set(key, {
+      kind: "delete",
+      sessionId: agent.sessionId,
+      id: agent.id,
+    });
+    this.schedule(key);
   }
 
-  private schedule(id: string): void {
-    const existing = this.timers.get(id);
+  private schedule(key: string): void {
+    const existing = this.timers.get(key);
     if (existing) clearTimeout(existing);
-    const timer = setTimeout(() => this.flush(id), FLUSH_DELAY_MS);
-    this.timers.set(id, timer);
+    const timer = setTimeout(() => this.flush(key), FLUSH_DELAY_MS);
+    this.timers.set(key, timer);
   }
 
-  private async flush(id: string): Promise<void> {
-    this.timers.delete(id);
-    const op = this.pending.get(id);
+  private async flush(key: string): Promise<void> {
+    this.timers.delete(key);
+    const op = this.pending.get(key);
     if (!op) return;
-    this.pending.delete(id);
+    this.pending.delete(key);
     try {
       if (op.kind === "write") {
         await writeAgentFile(this.stateDir, op.agent);
       } else {
-        await removeAgentFile(this.stateDir, id);
+        await removeAgentFile(this.stateDir, op.sessionId, op.id);
       }
     } catch (err) {
-      console.warn(`[daemon] disk-sync ${id}:`, err);
+      console.warn(`[daemon] disk-sync ${key}:`, err);
     }
   }
 
   async flushAll(): Promise<void> {
-    const ids = Array.from(this.timers.keys());
-    for (const id of ids) {
-      const t = this.timers.get(id);
+    const keys = Array.from(this.timers.keys());
+    for (const key of keys) {
+      const t = this.timers.get(key);
       if (t) clearTimeout(t);
     }
     this.timers.clear();
-    await Promise.all(ids.map((id) => this.flush(id)));
+    await Promise.all(keys.map((key) => this.flush(key)));
   }
 }

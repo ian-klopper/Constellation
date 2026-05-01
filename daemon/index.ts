@@ -40,9 +40,9 @@ async function main() {
   const watchers = new TranscriptWatcher(lifecycle);
 
   lifecycle.setHooks({
-    onBackgroundTranscript: (id, p, cwd) => watchers.watchBackground(id, p, cwd),
-    onMainTranscript: (p) => watchers.watchMain(p),
-    stopWatchersFor: (id) => watchers.stopFor(id),
+    onBackgroundTranscript: (key, p, cwd) => watchers.watchBackground(key, p, cwd),
+    onMainTranscript: (sessionId, p) => watchers.watchMain(sessionId, p),
+    stopWatchersFor: (key) => watchers.stopFor(key),
   });
 
   await lifecycle.loadFromDisk(stateDir);

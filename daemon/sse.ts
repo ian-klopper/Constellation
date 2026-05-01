@@ -1,10 +1,11 @@
 /**
  * Tiny Server-Sent Events broadcaster. The daemon's lifecycle reducer
- * emits a full snapshot on every change; this fan-outs that snapshot
- * to every connected client. /api/agents/stream pipes through to here.
+ * emits a full payload (agents + repo summaries) on every change; this
+ * fan-outs that payload to every connected client. /api/agents/stream
+ * pipes through to here.
  */
 import type { ServerResponse } from "node:http";
-import type { ActiveAgent } from "@/lib/types";
+import type { AgentsPayload } from "@/lib/types";
 
 const KEEPALIVE_MS = 25_000;
 
@@ -16,7 +17,7 @@ export class SseBroker {
     this.keepalive = setInterval(() => this.ping(), KEEPALIVE_MS);
   }
 
-  add(res: ServerResponse, snapshot: ActiveAgent[]): void {
+  add(res: ServerResponse, payload: AgentsPayload): void {
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -24,12 +25,12 @@ export class SseBroker {
       "X-Accel-Buffering": "no",
     });
     this.clients.add(res);
-    this.send(res, "snapshot", snapshot);
+    this.send(res, "snapshot", payload);
     res.on("close", () => this.clients.delete(res));
   }
 
-  broadcast(snapshot: ActiveAgent[]): void {
-    for (const res of this.clients) this.send(res, "snapshot", snapshot);
+  broadcast(payload: AgentsPayload): void {
+    for (const res of this.clients) this.send(res, "snapshot", payload);
   }
 
   close(): void {

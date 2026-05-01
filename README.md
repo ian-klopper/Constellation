@@ -150,15 +150,17 @@ Default N. On `y`, invoke the `/constellation:describe-codebase` skill and let i
 
 # 7. Start the visualizer
 
-From `$TARGET`:
+Spawn the supervisor in the BACKGROUND so this prompt can finish and the user keeps an interactive Claude Code session. From `$TARGET`:
 
     CONSTELLATION_TARGET_ROOT="$PWD" npm run dev --prefix "$INSTALL_DIR"
 
-Wait ~2 seconds, then verify the daemon is up:
+Use your tool's background-process facility (e.g., Bash with `run_in_background: true`). Do NOT block the prompt waiting for it to exit. Capture stdout/stderr to a log file the user can tail (suggested: `$TARGET/.constellation/supervisor.log`) so they can debug without you in the loop.
+
+Wait ~2 seconds for the daemon to bind, then verify:
 
     curl -s -m 1 http://127.0.0.1:47317/health
 
-Expected: `{"ok":true}`. If the call fails or the response is empty, print: "Daemon didn't come up on port 47317. Check the supervisor logs (printed above) for errors. Common cause: another Constellation supervisor is already running against a different repo — port 47317 only handles one target at a time."
+Expected: `{"ok":true}`. If the call fails or the response is empty, kill the background process, print the last ~30 lines of the supervisor log, and surface: "Daemon didn't come up on port 47317. Common cause: another Constellation supervisor is already running against a different repo — port 47317 only handles one target at a time. Stop the other one (find it with `lsof -i :47317`) and re-run."
 
 Otherwise print verbatim:
 
@@ -166,10 +168,12 @@ Otherwise print verbatim:
 
       Visualizer: http://localhost:3000
       Daemon:     http://127.0.0.1:47317
+      Logs:       tail -f .constellation/supervisor.log
 
     Single target at a time — port 47317 is bound to this repo until you stop the
-    supervisor (Ctrl-C). To visualize a different repo, stop this one and re-paste
-    the prompt there.
+    supervisor. To stop it: `lsof -ti :47317 | xargs kill` (or `kill <pid>` from
+    the supervisor log header). To visualize a different repo, stop this one
+    first and re-paste the prompt there.
 
     If anything looks broken, run /constellation:feedback "<what's wrong>" (if you
     opted in at step 5) to file an issue.

@@ -21,6 +21,7 @@ import { discoverFiles } from "./scan/discover";
 import { extractSymbols } from "./scan/symbols";
 import { buildImportGraph } from "./scan/imports";
 import { extractDescriptions } from "./scan/descriptions";
+import { loadDescriptionSidecar } from "./scan/description-sidecar";
 import { assembleTree, countTree } from "./scan/tree";
 
 export { countTree };
@@ -101,6 +102,12 @@ export async function scanProject(
   // Pull descriptions from the source we actually read; merge with the
   // canned placeholder descriptions written above.
   for (const [relPath, desc] of extractDescriptions(sources)) {
+    descriptionsByPath.set(relPath, desc);
+  }
+
+  // Sidecar overrides win — the user typed those by hand, in-file
+  // descriptions are a default. ENOENT (no sidecar) is the common case.
+  for (const [relPath, desc] of await loadDescriptionSidecar(root)) {
     descriptionsByPath.set(relPath, desc);
   }
 

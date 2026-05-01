@@ -63,4 +63,4 @@ This is a personal project — early, opinionated, and rough around the edges. T
 
 ## License
 
-No license yet — this is a personal repo. If you want to use any of it, open an issue and we'll figure something out.
+[MIT](./LICENSE) — do whatever, just keep the copyright notice and don't blame me if it breaks.

@@ -12,10 +12,10 @@
  * would force both surfaces to share the same truncation, which broke R4
  * (panel must show the full description).
  *
- * The `/constellation:describe-codebase` skill mirrors these has-header
- * rules in markdown so it can run in any repo without importing this
- * module. If you change the JSDoc / shell / markdown detection here,
- * also update `.claude/skills/constellation/describe-codebase/SKILL.md`.
+ * The description-writer prompt at the end of `install.sh` mirrors these
+ * has-header rules so the launched Claude session can decide which files
+ * to skip without importing this module. If you change the JSDoc / shell
+ * / markdown detection here, also update the prompt in `install.sh`.
  */
 import "server-only";
 import path from "node:path";

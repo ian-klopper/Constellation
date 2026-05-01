@@ -22,7 +22,7 @@ Run it in your shell — not inside Claude Code's `!` mode, where the script can
 
 The script preflights Node 20+, `jq`, and git, asks where to clone Constellation as a sibling, installs its dependencies, and copies hook shims and skills into your repo's `.claude/`.
 
-For the final settings-merge step, the script prints a unified JSON diff against your `.claude/settings.json` (creating the file if missing) plus the full contents of every hook script that will run on your tool calls. After your `y` confirmation, it merges the file in place and starts the visualizer at <http://localhost:47318>. No Claude Code session required to finish the install — the [live-agent overlay](#how-the-live-agent-overlay-works) lights up on its own next time you run Claude Code in the repo.
+For the final settings-merge step, the script prints a unified JSON diff against your `.claude/settings.json` (creating the file if missing) plus the full contents of every hook script that will run on your tool calls. After your `y` confirmation, it merges the file in place and starts the visualizer at <http://localhost:47318>. As a last step, if `claude` is on your PATH, the installer offers to launch Claude Code in plan mode with a self-contained prompt that walks you through populating each file's description so tiles and hover cards aren't blank — you can press `n` to skip and run the installer again later. The [live-agent overlay](#how-the-live-agent-overlay-works) lights up on its own next time you run Claude Code in the repo regardless.
 
 To update Constellation later, just run the same line again — the script detects the existing clone and offers to fetch the latest `main`.
 
@@ -33,7 +33,7 @@ For non-interactive use (CI, scripted setups), set `CONSTELLATION_INSTALL_DIR=<a
 - **Sibling clone** at the path you choose: Constellation's own source + `node_modules`, outside your repo.
 - **`.claude/hooks/constellation/`** in your repo — six 3–5-line `curl` shims with a 500ms timeout and `|| true`, so a downed daemon never breaks your Claude Code session.
 - **`.claude/settings.json`** matchers (only after your approval) — appended, never edited in place.
-- **`.claude/skills/constellation/{describe-codebase,feedback}/`** — inert until you invoke them. Run `/constellation:describe-codebase` to populate tile descriptions; `/constellation:feedback` to file an issue here.
+- **`.claude/skills/constellation/feedback/`** — inert until invoked. Run `/constellation:feedback` to file an issue here. (The end-of-install step offers to launch Claude Code in plan mode to populate per-file descriptions, so there's no separate skill for that — re-run the installer to redo it.)
 - **`.constellation/`** appended to your `.gitignore` (lifecycle state lives there at runtime).
 
 ## Hacking on Constellation itself

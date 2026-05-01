@@ -8,9 +8,10 @@
 # terminal (some IDE terminals, CI runners, sandboxes).
 # Clones Constellation to a sibling directory, installs deps, copies
 # hooks + skills into TARGET, runs the deterministic settings.json
-# merge (scripts/install-settings.mjs), and starts the visualizer in
-# the background. Refuses to run non-interactively unless
-# CONSTELLATION_INSTALL_DIR is set.
+# merge (scripts/install-settings.mjs), starts the visualizer in the
+# background, and offers to launch Claude Code in plan mode to
+# populate per-file descriptions. Refuses to run non-interactively
+# unless CONSTELLATION_INSTALL_DIR is set.
 
 set -euo pipefail
 
@@ -175,7 +176,7 @@ done
 chmod +x "$TARGET"/.claude/hooks/constellation/*.sh
 
 say "Copying skills into .claude/skills/constellation/ ..."
-for skill in describe-codebase feedback; do
+for skill in feedback; do
   for f in "$INSTALL_DIR"/.claude/skills/constellation/"$skill"/*; do
     [ -f "$f" ] || continue
     copy_with_prompt "$f" "$TARGET/.claude/skills/constellation/$skill/$(basename "$f")"
@@ -227,15 +228,139 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
   fi
 done
 
-if [ "$ready" -eq 1 ]; then
+if [ "$ready" -ne 1 ]; then
+  err "Daemon didn't come up within 10s. Logs at $LOG_FILE — try 'cd $INSTALL_DIR && npm run dev' to see what went wrong."
+  exit 1
+fi
+
+say ""
+say "Visualizer ready at http://localhost:$WEB_PORT"
+say "  - Hover any tile to see its description; click to pin."
+say "  - Live agent overlay turns on automatically inside Claude Code sessions."
+say "  - Stop the visualizer with: pkill -f 'npm run dev' (logs at $LOG_FILE)"
+
+# 10. Offer to launch Claude Code in plan mode for descriptions -------------
+
+# The visualizer is up but most tiles only show filenames. Constellation
+# reads a leading-comment description out of each file (JSDoc for code,
+# `#` block for shell, first paragraph for markdown) and shows it on the
+# tile and in the hover card. Adding those comments is the only thing
+# left to make the visualizer genuinely useful, and it's the kind of
+# work only an AI can do across hundreds of files at once. So we offer
+# to hand off to the user's local `claude` CLI in plan mode with a
+# self-contained prompt — no /constellation skill indirection. The user
+# pays the token cost, sees the proposed scope before any descriptions
+# get written, and ends up with the visualizer in its populated state.
+#
+# Bash 3.2 (macOS default) chokes on `VAR=$(cat <<EOF...EOF)` for some
+# punctuation, so we use the `IFS='' read -r -d '' VAR <<'EOF' ... EOF`
+# pattern instead. `IFS=''` preserves the indented list items inside the
+# prompt body; the single-quoted `'EOF'` delimiter prevents bash from
+# expanding `$var` / backticks in the prompt. We then substitute
+# __WEB_PORT__ ourselves so the URL reflects the actual configured port.
+
+IFS='' read -r -d '' DESCRIBE_PROMPT_TEMPLATE <<'EOF' || true
+You're being launched at the end of Constellation's install. Constellation is now visualizing this repo as a treemap at http://localhost:__WEB_PORT__ — but most tiles only show filenames. The fix: each file gets a one- or two-sentence comment at the top saying what it's for in plain English. Constellation reads those comments and shows them on each tile and in the hover card. That's the only thing left to make the visualizer useful.
+
+Plan mode is on. Work through this with the user.
+
+## Step 1 — Survey
+
+Walk the repo (cwd is the user's project). Skip these paths entirely — they're not part of what Constellation visualizes:
+- `node_modules/`, `.next/`, `dist/`, `out/`, `build/`, `.git/`, `.constellation/`, `.claude/worktrees/`, `.claude/settings.local.json`, `next-env.d.ts`
+- `*.tsbuildinfo`, `.DS_Store`, and lockfiles (`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `bun.lockb`)
+- Binaries and assets: `*.png`, `*.jpg`, `*.jpeg`, `*.gif`, `*.ico`, `*.svg`, `*.webp`, `*.bmp`, `*.woff`, `*.woff2`, `*.ttf`, `*.eot`, `*.otf`, `*.pdf`, `*.zip`, `*.gz`, `*.tar`, `*.exe`, `*.dmg`
+
+Of what remains, only files with these extensions can hold a description Constellation will read:
+- `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.css`, `.scss` — JSDoc block: `/** … */`
+- `.sh` — `#` comment block (after the shebang line if there is one)
+- `.md` — the first paragraph after any heading
+
+Skip files that already have a description in the matching format — never overwrite an existing comment. If a file has an existing comment in a non-matching format (e.g. a `//` line at the top of a `.ts` file), also skip and report it; leave it alone.
+
+Tell the user roughly how many files would get a description and which directories they're concentrated in. If the repo is large enough that scanning every file would be obviously expensive, say so.
+
+## Step 2 — Decide scope with the user
+
+Offer choices in plain language. Reasonable shapes:
+- describe everything in one pass
+- only specific directories the user names
+- skip files under some line count (descriptions matter most for files big enough to matter)
+- skip entirely (the user can re-run the installer to do this later)
+
+Recommend whichever option fits this repo best and give one sentence on why. Wait for the user to pick — don't assume. The user is paying for the tokens this run uses, so make the cost shape (file count, file types) tactile, not abstract.
+
+## Step 3 — Write the descriptions
+
+For each candidate file in the agreed scope:
+1. Read the file.
+2. Write a one- or two-sentence intent description: what the file is *for*, who uses it, what a future reader needs to know before opening it. Don't restate what the code does — the code does that itself.
+   - Bad: "Exports an `add` function that takes two numbers and returns their sum."
+   - Good: "Cursor-anchored floating panel that shows the active tile's description, exports, and import lists. Pin-mode keeps it visible after the cursor leaves; hover-mode follows the pointer."
+3. If after reading the file you genuinely can't tell what it's for, skip it. A wrong description is worse than no description for a vibecoder reading the map.
+4. Prepend the description in the right syntax for the file's language:
+   - `.ts/.tsx/.js/.jsx/.mjs/.cjs/.css/.scss`: a `/** ... */` block then existing contents.
+   - `.sh` with shebang: keep the shebang, insert a `# <description>` line plus a blank line after it.
+   - `.sh` without shebang: a `# <description>` line plus a blank line, then existing contents.
+   - `.md` with a heading: description as a paragraph immediately after the first heading.
+   - `.md` without a heading: description as the first paragraph.
+5. Preserve the file's trailing-newline discipline. Don't add trailing whitespace.
+
+Don't stage or commit anything. Leave every change unstaged so the user reviews with `git diff` and decides what to keep.
+
+## Step 4 — Report
+
+When you're done, print a short summary:
+- N files described
+- M files skipped, broken down by reason (existing-header / existing-non-matching-header / uncertain)
+- K files unchanged (unsupported extension or matched the skip list)
+
+Then stop. The user runs `git diff`, picks what to keep, and reloads the visualizer to see the new descriptions.
+
+The user is an amateur developer. Talk plainly. Don't sell the feature — they already installed it.
+EOF
+DESCRIBE_PROMPT="${DESCRIBE_PROMPT_TEMPLATE//__WEB_PORT__/$WEB_PORT}"
+
+print_describe_prompt() {
   say ""
-  say "Visualizer ready at http://localhost:$WEB_PORT"
-  say "  - Hover any tile to see its description; click to pin."
-  say "  - Run /constellation:describe-codebase later to populate tile descriptions."
-  say "  - Live agent overlay turns on automatically inside Claude Code sessions."
-  say "  - Stop the visualizer with: pkill -f 'npm run dev' (logs at $LOG_FILE)"
+  say "Open Claude Code in this directory and paste this prompt:"
+  say ""
+  printf '%s\n' "$DESCRIBE_PROMPT"
+  say ""
+}
+
+if ! [ -t 0 ]; then
+  # Non-interactive (CI, scripted): print the prompt for the caller and exit.
+  print_describe_prompt
+  exit 0
+elif ! command -v claude >/dev/null 2>&1; then
+  say ""
+  say "(\`claude\` CLI not on PATH — install Claude Code, then paste this:)"
+  print_describe_prompt
   exit 0
 fi
 
-err "Daemon didn't come up within 10s. Logs at $LOG_FILE — try 'cd $INSTALL_DIR && npm run dev' to see what went wrong."
-exit 1
+say ""
+say "Last step: file descriptions make tile hover-cards useful instead of blank."
+say "We can launch Claude Code now in plan mode to walk through that with you,"
+say "or you can re-run the installer later when you're ready."
+say "(Plan mode means Claude tells you what it'll do before doing anything; if"
+say "Claude exits immediately, you may need to authenticate first — see"
+say "https://docs.claude.com/en/docs/claude-code.)"
+ask "Launch Claude Code now? [Y/n]: " n
+case "$REPLY" in
+  n|N|no)
+    say ""
+    say "Skipped. Re-run the installer in this repo whenever you're ready to populate descriptions."
+    exit 0
+    ;;
+  *)
+    say ""
+    say "Launching Claude Code in plan mode..."
+    exec claude --permission-mode plan "$DESCRIBE_PROMPT"
+    # Only reached if exec failed:
+    err "Couldn't exec claude. Falling back to manual paste."
+    print_describe_prompt
+    exit 1
+    ;;
+esac

@@ -256,6 +256,11 @@ export function Visualizer({
         ) {
           return;
         }
+        // While zoom is capped at 1, panning is a no-op (clampPan forces
+        // (0,0)). Skip the promotion so the cursor doesn't flicker to
+        // grabbing for a gesture that can't move anything. Click detection
+        // still works because state stays "pressed" until pointerup.
+        if (liveRef.current.zoom <= 1) return;
         // Promote to panning. Disabling pointer events on the wrapper
         // cleanly suppresses tile hover/mouseenter/leave during the gesture
         // (otherwise mousemove across many tiles would spam setHover and

@@ -9,14 +9,20 @@ import type { SseBroker } from "./sse";
 
 export type Server = ReturnType<typeof startServer>;
 
+export type ServerMeta = {
+  port: number;
+  startedAt: number;
+};
+
 export function startServer(
   port: number,
   lifecycle: Lifecycle,
   sse: SseBroker,
 ) {
+  const meta: ServerMeta = { port, startedAt: Date.now() };
   const server = createServer(async (req, res) => {
     try {
-      await route(req, res, lifecycle, sse);
+      await route(req, res, lifecycle, sse, meta);
     } catch (err) {
       console.warn("[daemon] route error:", err);
       if (!res.headersSent) {
@@ -33,13 +39,21 @@ async function route(
   res: ServerResponse,
   lifecycle: Lifecycle,
   sse: SseBroker,
+  meta: ServerMeta,
 ): Promise<void> {
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
   const route = `${req.method} ${url.pathname}`;
 
   if (route === "GET /health") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: true }));
+    res.end(
+      JSON.stringify({
+        ok: true,
+        uptime: Math.floor((Date.now() - meta.startedAt) / 1000),
+        agentCount: lifecycle.snapshot().length,
+        port: meta.port,
+      }),
+    );
     return;
   }
 

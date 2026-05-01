@@ -22,6 +22,7 @@ const {
   DESCRIPTION_LINE_HEIGHT,
   DESCRIPTION_PADDING_Y,
   FILE_TILE_HEADER_HEIGHT,
+  ARTICLE_BORDER_Y,
 } = TREEMAP;
 
 type Props = {
@@ -148,7 +149,12 @@ function FileTile({
             ? "tile-dim"
             : "";
 
-  const availableH = h - FILE_TILE_HEADER_HEIGHT - DESCRIPTION_PADDING_Y;
+  // h is the full article box (border-box), so the borders count against
+  // the content area. Without subtracting them the math over-promises by
+  // up to one line, which leaves a 2px sliver of the next line peeking
+  // through overflow:hidden under the ellipsis.
+  const availableH =
+    h - FILE_TILE_HEADER_HEIGHT - DESCRIPTION_PADDING_Y - ARTICLE_BORDER_Y;
   const lines = Math.floor(availableH / DESCRIPTION_LINE_HEIGHT);
   const showDescription = lines >= 1 && Boolean(node.description);
 

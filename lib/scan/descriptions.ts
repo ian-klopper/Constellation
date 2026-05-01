@@ -1,11 +1,16 @@
 /**
- * Pulls a short description from each file's leading comment block.
- * JS/TS/CSS files use a /** … *\/ JSDoc; shell scripts use the leading
- * # lines after the shebang; markdown grabs the first paragraph below
- * any heading. For everything else (JSON, lockfiles, .gitignore, etc.)
- * we leave description undefined and let the tile show just its filename
- * — a wrong guess is worse than none for the vibecoder this map is
- * built for.
+ * Pulls a description from each file's leading comment block. JS/TS/CSS
+ * files use a /** … *\/ JSDoc; shell scripts use the leading # lines after
+ * the shebang; markdown grabs the first paragraph below any heading. For
+ * everything else (JSON, lockfiles, .gitignore, etc.) we leave description
+ * undefined and let the tile show just its filename — a wrong guess is
+ * worse than none for the vibecoder this map is built for.
+ *
+ * No length cap. The tile applies a per-tile line-clamp at render time to
+ * fit the description into whatever vertical space the squarify layout
+ * gave it; the hover panel scrolls long descriptions. A scan-time clamp
+ * would force both surfaces to share the same truncation, which broke R4
+ * (panel must show the full description).
  */
 import "server-only";
 import path from "node:path";
@@ -13,8 +18,6 @@ import path from "node:path";
 const JSDOC_LIKE_EXTS = new Set([
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".css", ".scss",
 ]);
-
-const DESCRIPTION_MAX_LEN = 240;
 
 export function extractDescriptions(
   sources: Map<string, string>,
@@ -48,7 +51,7 @@ function extractJsDoc(source: string): string | undefined {
     .replace(/\s+/g, " ")
     .trim();
   // Drop anything from the first JSDoc tag onward (e.g. @param, @returns).
-  return clamp(body.split(/\s@\w/)[0].trim());
+  return nonEmpty(body.split(/\s@\w/)[0].trim());
 }
 
 function extractShellHeader(source: string): string | undefined {
@@ -66,7 +69,7 @@ function extractShellHeader(source: string): string | undefined {
     i++;
   }
   if (out.length === 0) return undefined;
-  return clamp(out.join(" ").replace(/\s+/g, " ").trim());
+  return nonEmpty(out.join(" ").replace(/\s+/g, " ").trim());
 }
 
 function extractMarkdownIntro(source: string): string | undefined {
@@ -80,14 +83,11 @@ function extractMarkdownIntro(source: string): string | undefined {
       if (next === "" || next.startsWith("#")) break;
       para.push(next);
     }
-    return clamp(para.join(" ").replace(/\s+/g, " ").trim());
+    return nonEmpty(para.join(" ").replace(/\s+/g, " ").trim());
   }
   return undefined;
 }
 
-function clamp(s: string): string | undefined {
-  if (!s) return undefined;
-  return s.length > DESCRIPTION_MAX_LEN
-    ? s.slice(0, DESCRIPTION_MAX_LEN - 3).trimEnd() + "…"
-    : s;
+function nonEmpty(s: string): string | undefined {
+  return s ? s : undefined;
 }

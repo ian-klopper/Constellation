@@ -21,6 +21,10 @@ export const TREEMAP = {
   // side). Stored as the total — not per-side — so the line-clamp math reads
   // `h - HEADER - PADDING_Y` directly without a 2x multiplier foot-gun.
   DESCRIPTION_PADDING_Y: 12,
+  // Tile <article> border total: 1px top + 1px bottom (border-box). The
+  // squarify-supplied `h` is the full box; subtracting the borders gives
+  // the actual content area the header + description must fit inside.
+  ARTICLE_BORDER_Y: 2,
   // Top-level directory background tints. Subdirectories inherit their parent's.
   TINTS: {
     app: "bg-[#eef2f7]",

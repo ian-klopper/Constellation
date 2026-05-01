@@ -29,7 +29,7 @@ export function AgentIcon({ agent, idle }: { agent: ActiveAgent; idle: boolean }
   return (
     <div
       title={tooltip}
-      className={`pointer-events-auto absolute inset-0 flex items-center justify-center rounded-full ${bg} text-[12px] font-semibold text-white shadow-lg ring-2 ring-white`}
+      className={`absolute inset-0 flex items-center justify-center rounded-full ${bg} text-[12px] font-semibold text-white shadow-lg ring-2 ring-white`}
     >
       {glyph}
       {!idle && (

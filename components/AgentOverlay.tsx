@@ -31,7 +31,10 @@ export function AgentOverlay() {
   if (agents.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-50">
+    <div
+      data-agent-overlay
+      className="pointer-events-none fixed inset-0 z-50"
+    >
       {agents.map((a) => {
         const pos = positions.get(a.id);
         if (!pos) return null;

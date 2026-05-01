@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Constellation installer. Pipes from
-# https://raw.githubusercontent.com/ian-klopper/Constellation/main/install.sh
-# into bash, run from inside the user's git working tree (TARGET).
+# Constellation installer. Invoked from inside the user's git working
+# tree (TARGET) via:
+#   bash <(curl -fsSL https://raw.githubusercontent.com/ian-klopper/Constellation/main/install.sh)
+# Process substitution (not curl-pipe-bash) so the script's stdin stays
+# the user's terminal — `read` works without /dev/tty gymnastics, which
+# fail in any environment whose bash subshell lacks a controlling
+# terminal (some IDE terminals, CI runners, sandboxes).
 # Clones Constellation to a sibling directory, installs deps, copies
 # hooks + skills into TARGET, and prints a one-paste handoff for Claude
 # Code to do the .claude/settings.json merge + supervisor start.
@@ -41,7 +45,7 @@ say "  2) ~/src/constellation"
 say "  3) ~/projects/constellation"
 say "  4) (type a custom absolute path)"
 printf 'Choice [1-4 or path]: '
-read -r choice </dev/tty
+read -r choice
 case "$choice" in
   1) INSTALL_DIR="$HOME/code/constellation" ;;
   2) INSTALL_DIR="$HOME/src/constellation" ;;
@@ -58,7 +62,7 @@ if [ -e "$INSTALL_DIR" ]; then
     say ""
     say "Existing Constellation install found at $INSTALL_DIR."
     printf 'Update it (git fetch + checkout main)? [y/N]: '
-    read -r ans </dev/tty
+    read -r ans
     case "$ans" in
       y|Y|yes) git -C "$INSTALL_DIR" fetch --depth 1 origin main && git -C "$INSTALL_DIR" checkout origin/main ;;
       *) say "Skipping update." ;;
@@ -85,7 +89,7 @@ copy_with_prompt() {
   dst="$2"
   if [ -e "$dst" ] && ! cmp -s "$src" "$dst"; then
     printf '  %s exists and differs. Overwrite? [y/N]: ' "$dst"
-    read -r ans </dev/tty
+    read -r ans
     case "$ans" in y|Y|yes) ;; *) say "    skipped"; return ;; esac
   fi
   mkdir -p "$(dirname "$dst")"

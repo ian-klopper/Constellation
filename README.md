@@ -15,14 +15,16 @@ The agent overlay is the part I'm genuinely curious about. As more of the work i
 In any git working tree (the codebase you want to visualize), run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ian-klopper/Constellation/main/install.sh | bash
+bash <(curl -fsSL https://raw.githubusercontent.com/ian-klopper/Constellation/main/install.sh)
 ```
+
+The `bash <(…)` form (rather than `curl … | bash`) is deliberate — it leaves the script's stdin attached to your terminal so the prompts work cleanly even in IDE terminals that don't expose `/dev/tty`.
 
 The script preflights Node 20+, `jq`, and git, asks where to clone Constellation as a sibling, installs its dependencies, and copies hook shims and skills into your repo's `.claude/`. **It does not touch your `.claude/settings.json`.**
 
 For that last step the script prints a short prompt to paste into [Claude Code](https://docs.claude.com/en/docs/claude-code), running in the same directory. Claude shows you the diff to `settings.json` and the full contents of every hook script before writing anything, then starts the visualizer at <http://localhost:47318>.
 
-To update Constellation later, just pipe the same `curl` line again — the script detects the existing clone and offers to fetch the latest `main`.
+To update Constellation later, just run the same line again — the script detects the existing clone and offers to fetch the latest `main`.
 
 ### What gets installed
 

@@ -52,9 +52,19 @@ function TreemapNodeImpl({ node, x, y, w, h, depth, tint }: Props) {
   // *not* swap to getLive().zoom: the whole point of the ref-driven
   // architecture is to keep continuous zoom values out of TreemapNode.
   const { committedZoom } = useZoomPan();
-  // User-tunable LOD floor. Defaults to TREEMAP.MIN_RENDER (8 px); the
-  // header DetailSlider writes new values which reflow the gate live.
+  // User-tunable LOD floor. Defaults to level 38 (≈ 8 px); the header
+  // DetailSlider writes new values which reflow the gate live.
   const { minRender } = useLod();
+
+  // Per-tile LOD gate. A tile (file *or* directory) below this floor is
+  // skipped entirely — its area becomes empty space inside its parent.
+  // The root (depth = 0) is exempt so the visualization is never empty.
+  // Without this, the gate only culls a directory's *children*, leaving
+  // the directory's own label tile rendering at any size — which made
+  // the slider feel like it "didn't affect all the boxes".
+  const tooSmall =
+    depth > 0 &&
+    (w * committedZoom < minRender || h * committedZoom < minRender);
 
   const style = {
     position: "absolute" as const,
@@ -65,6 +75,7 @@ function TreemapNodeImpl({ node, x, y, w, h, depth, tint }: Props) {
   };
 
   if (node.kind === "file") {
+    if (tooSmall) return null;
     return <FileTile node={node} style={style} h={h} />;
   }
 
@@ -84,19 +95,19 @@ function TreemapNodeImpl({ node, x, y, w, h, depth, tint }: Props) {
         h: h - LABEL_HEIGHT - 2 * INNER_PAD,
       };
 
-  // Zoom-aware gate: as the user zooms in, more children clear `minRender`
-  // and become visible; zooming out culls them. At zoom=1 the gate
-  // matches the legacy `inner.w >= minRender` check exactly. Hidden
-  // children's area is silently absorbed by the parent — the directory
-  // background fills the gap (no "+N hidden" placeholder).
+  // Children-expansion gate: even if this directory's own tile clears the
+  // per-tile floor, lay out children only when the *inner* area also does.
+  // Otherwise the directory shows just its label and absorbs the empty
+  // space — no "+N hidden" placeholder. tooSmall folds in here too so a
+  // tile we're about to skip doesn't waste work on squarify.
   //
   // Description line-clamp math (in FileTile below) intentionally stays
-  // in *layout-px*, not zoom-aware px. Zooming scales the rendered text
-  // but the *number* of lines stays constant; full zoom-aware line-count
-  // is a deferred follow-up.
+  // in layout-px. Zoom doesn't change the *number* of description lines;
+  // full zoom-aware line-count is a deferred follow-up.
   const renderW = inner.w * committedZoom;
   const renderH = inner.h * committedZoom;
   const canRender =
+    !tooSmall &&
     renderW >= minRender &&
     renderH >= minRender &&
     node.children.length > 0;
@@ -122,6 +133,11 @@ function TreemapNodeImpl({ node, x, y, w, h, depth, tint }: Props) {
     },
     [node.children, inner.x, inner.y, inner.w, inner.h, canRender],
   );
+
+  // Per-tile gate fires *after* useMemo so the hook order stays stable
+  // for this instance across re-renders (squarify above no-ops via the
+  // canRender check, so no real work is wasted).
+  if (tooSmall) return null;
 
   return (
     <section style={style} className={sectionClass}>

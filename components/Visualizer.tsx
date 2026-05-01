@@ -21,6 +21,10 @@ export function Visualizer({ tree }: { tree: CodebaseTree }) {
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(
     null,
   );
+  // True while the cursor is over the floating HoverPanel. Tiles read this
+  // in their onMouseLeave to keep the panel up when hover crosses tile→panel.
+  // Ref instead of state: toggling .current must not re-render every tile.
+  const panelHoveredRef = useRef(false);
 
   const setHover = useCallback(
     (path: string | null, pos?: { x: number; y: number }) => {
@@ -66,7 +70,7 @@ export function Visualizer({ tree }: { tree: CodebaseTree }) {
   }, [hoveredPath, filesByPath]);
 
   const hoverValue = useMemo<HoverContextValue>(
-    () => ({ hoveredPath, inputs, outputs, setHover }),
+    () => ({ hoveredPath, inputs, outputs, setHover, panelHoveredRef }),
     [hoveredPath, inputs, outputs, setHover],
   );
 

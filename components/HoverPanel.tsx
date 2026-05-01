@@ -13,6 +13,7 @@
 
 import { useEffect, useRef } from "react";
 import { SymbolRow } from "./SymbolRow";
+import { useHover } from "./HoverContext";
 import { HOVER_PANEL } from "@/lib/constants";
 import type { FileNode } from "@/lib/types";
 
@@ -41,6 +42,7 @@ export function HoverPanel({
   pinnedPos?: Pos | null;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { panelHoveredRef } = useHover();
 
   // Reset scrollTop on file change without remounting the panel. A keyed
   // remount (key={file.path}) would destroy the DOM element on every hover
@@ -99,6 +101,12 @@ export function HoverPanel({
     <div
       ref={scrollRef}
       data-hover-panel
+      onMouseEnter={() => {
+        panelHoveredRef.current = true;
+      }}
+      onMouseLeave={() => {
+        panelHoveredRef.current = false;
+      }}
       style={{ left, top, width: PANEL_WIDTH, maxHeight: maxH, transform }}
       className="fixed z-40 overflow-y-auto rounded-sm border border-zinc-300 bg-white/95 p-3 text-[11px] text-zinc-800 shadow-lg backdrop-blur-sm"
     >

@@ -4,16 +4,22 @@
  * inputs, outputs, and onHover through every recursive child. mousePos
  * stays in Visualizer-local state on purpose — putting it here would
  * re-render every tile on every mousemove.
+ *
+ * panelHoveredRef is a non-reactive escape hatch: a ref object in context
+ * has stable identity (only its .current mutates), so reads are cheap and
+ * toggling .current does not re-render any consumer. Used for cross-
+ * element hover survival between the tile and the floating panel.
  */
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, type MutableRefObject } from "react";
 
 export type HoverContextValue = {
   hoveredPath: string | null;
   inputs: Set<string>;
   outputs: Set<string>;
   setHover: (path: string | null, pos?: { x: number; y: number }) => void;
+  panelHoveredRef: MutableRefObject<boolean>;
 };
 
 export const HoverContext = createContext<HoverContextValue | null>(null);

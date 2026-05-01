@@ -116,7 +116,8 @@ function FileTile({
   style: React.CSSProperties;
   h: number;
 }) {
-  const { hoveredPath, inputs, outputs, setHover } = useHover();
+  const { hoveredPath, inputs, outputs, setHover, panelHoveredRef } =
+    useHover();
   const registerTile = useRegisterTile(node.path);
 
   const isHovered = hoveredPath === node.path;
@@ -148,7 +149,19 @@ function FileTile({
       style={style}
       onMouseEnter={(e) => setHover(node.path, { x: e.clientX, y: e.clientY })}
       onMouseMove={(e) => setHover(node.path, { x: e.clientX, y: e.clientY })}
-      onMouseLeave={() => setHover(null)}
+      onMouseLeave={(e) => {
+        // Cross-element hover survival: if the cursor is heading onto the
+        // floating panel, keep the hover. relatedTarget is null on rapid
+        // mouseouts in some browsers, so panelHoveredRef.current is the
+        // fallback — if the panel's onMouseEnter has already fired, we
+        // know the cursor is inside it.
+        const goingToPanel = (e.relatedTarget as Element | null)?.closest(
+          "[data-hover-panel]",
+        );
+        if (goingToPanel) return;
+        if (panelHoveredRef.current) return;
+        setHover(null);
+      }}
       className={`relative overflow-hidden border border-zinc-300 bg-white/40 transition-[opacity,background-color,border-color] duration-150 ${stateClass}`}
     >
       <header className="truncate border-b border-zinc-300 bg-white/30 px-2 py-1 text-[11px] text-zinc-600">

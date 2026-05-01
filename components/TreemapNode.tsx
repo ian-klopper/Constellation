@@ -8,7 +8,7 @@
  */
 "use client";
 
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { squarify } from "@/lib/treemap";
 import { TREEMAP } from "@/lib/constants";
 import { useHover } from "./HoverContext";
@@ -37,7 +37,16 @@ type Props = {
   tint: string | null;
 };
 
-export function TreemapNode({ node, x, y, w, h, depth, tint }: Props) {
+// Memoized so a Visualizer re-render that doesn't change layout-px props or
+// committedZoom (e.g., pinnedPos updates while panning) skips re-executing
+// the entire recursive tree. Context changes (HoverContext, ZoomPanContext)
+// still propagate to consumers below — useHover in FileTile and useZoomPan
+// here both bypass memo. This is the load-bearing perf optimization that
+// lets PinController call setPinned on every transform tick without
+// blowing up the render budget on Parsley-scale repos.
+export const TreemapNode = memo(TreemapNodeImpl);
+
+function TreemapNodeImpl({ node, x, y, w, h, depth, tint }: Props) {
   // committedZoom is React state — updates only on LOD_COMMIT_QUANTUM
   // crossings, so this hook does NOT cause per-detent reconciliation. Do
   // *not* swap to getLive().zoom: the whole point of the ref-driven

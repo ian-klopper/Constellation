@@ -14,6 +14,7 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { OVERLAY } from "@/lib/constants";
 import { useTileRegistry } from "@/components/TileRegistry";
+import { useZoomPan } from "@/components/ZoomPanContext";
 import type { DisplayAgent } from "./useAgentLifecycle";
 
 const { ICON_SIZE, PARK_TOP, PARK_RIGHT, PARK_GAP, STACK_OFFSET } = OVERLAY;
@@ -22,6 +23,7 @@ export type Pos = { x: number; y: number };
 
 export function useAgentPositions(agents: DisplayAgent[]): Map<string, Pos> {
   const registry = useTileRegistry();
+  const { subscribeTransformChange } = useZoomPan();
   const [positions, setPositions] = useState<Map<string, Pos>>(new Map());
 
   // Recompute when the agent list changes (initial + every snapshot).
@@ -29,19 +31,23 @@ export function useAgentPositions(agents: DisplayAgent[]): Map<string, Pos> {
     setPositions(compute(agents, registry));
   }, [agents, registry]);
 
-  // Recompute when tiles mount/unmount (resize re-runs squarify) and
-  // when the window itself changes shape.
+  // Recompute when tiles mount/unmount, when the window shape changes, and
+  // on every transform tick (so icons stay anchored under live zoom + pan).
+  // Per-frame setState during gestures is acceptable because AgentOverlay
+  // renders only a small set of icons, not the entire treemap.
   useEffect(() => {
     const recompute = () => setPositions(compute(agents, registry));
-    const unsub = registry.subscribe(recompute);
+    const unsubReg = registry.subscribe(recompute);
+    const unsubXf = subscribeTransformChange(recompute);
     window.addEventListener("resize", recompute);
     window.addEventListener("scroll", recompute, { passive: true });
     return () => {
-      unsub();
+      unsubReg();
+      unsubXf();
       window.removeEventListener("resize", recompute);
       window.removeEventListener("scroll", recompute);
     };
-  }, [agents, registry]);
+  }, [agents, registry, subscribeTransformChange]);
 
   return positions;
 }

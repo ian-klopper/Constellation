@@ -11,6 +11,11 @@
  * gave it; the hover panel scrolls long descriptions. A scan-time clamp
  * would force both surfaces to share the same truncation, which broke R4
  * (panel must show the full description).
+ *
+ * The `/constellation:describe-codebase` skill mirrors these has-header
+ * rules in markdown so it can run in any repo without importing this
+ * module. If you change the JSDoc / shell / markdown detection here,
+ * also update `.claude/skills/constellation/describe-codebase/SKILL.md`.
  */
 import "server-only";
 import path from "node:path";

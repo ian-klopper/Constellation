@@ -6,10 +6,12 @@
  * the map you see on the screen.
  */
 import "server-only";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Project } from "ts-morph";
 import type { CodebaseTree } from "./types";
+import { resolveTargetRoot } from "./config";
 import { discoverFiles } from "./scan/discover";
 import { extractSymbols } from "./scan/symbols";
 import { buildImportGraph } from "./scan/imports";
@@ -19,14 +21,18 @@ import { assembleTree, countTree } from "./scan/tree";
 export { countTree };
 
 export async function scanProject(
-  root: string = process.cwd(),
+  root: string = resolveTargetRoot(),
 ): Promise<CodebaseTree> {
   const { tsAbsPaths, otherAbsPaths } = await discoverFiles(root);
 
   // Load tsconfig so the resolver knows about path aliases (e.g. `@/*`),
-  // but skip auto-adding files — we control the file set ourselves.
+  // but skip auto-adding files — we control the file set ourselves. A
+  // foreign target without a tsconfig.json (Python repo, plain shell, etc.)
+  // gets ts-morph defaults; the import graph just won't follow path aliases
+  // it doesn't know about.
+  const tsConfigPath = path.join(root, "tsconfig.json");
   const project = new Project({
-    tsConfigFilePath: path.join(root, "tsconfig.json"),
+    tsConfigFilePath: existsSync(tsConfigPath) ? tsConfigPath : undefined,
     skipAddingFilesFromTsConfig: true,
   });
   project.addSourceFilesAtPaths(tsAbsPaths);

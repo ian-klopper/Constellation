@@ -8,12 +8,14 @@
 import { NextResponse } from "next/server";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { loadConfig, resolveStateDir } from "@/lib/config";
+import { loadConfig, resolveStateDir, resolveTargetRoot } from "@/lib/config";
 import { ActiveAgentSchema, type ActiveAgent } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  // Config is install-rooted (loadConfig reads from process.cwd(), which is
+  // the install dir under the supervisor). State files live in the target.
   const config = loadConfig();
 
   // Try the daemon first — it's the authoritative source.
@@ -31,7 +33,7 @@ export async function GET() {
   }
 
   // Fallback: read the on-disk lifecycle files.
-  const stateDir = resolveStateDir();
+  const stateDir = resolveStateDir(resolveTargetRoot());
   let entries: string[];
   try {
     entries = await fs.readdir(stateDir);

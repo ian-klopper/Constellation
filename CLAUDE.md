@@ -4,6 +4,13 @@ A codebase visualizer built with Next.js 16 (App Router), TypeScript, and Tailwi
 
 The visualizer scans `process.cwd()` and dogfoods itself — the home page renders this very repo. That means this CLAUDE.md is **also** part of the visualization. Keep it accurate: when the architecture, layout, or workflow changes, update this file in the same commit. See *Maintaining this file* below.
 
+**Two-root architecture (sibling-clone install).** Constellation can be pointed at any target repo by setting the `CONSTELLATION_TARGET_ROOT` env var to an absolute path. There are two distinct directories:
+
+- *Install root* — where Constellation's own code lives (`package.json`, `daemon/`, `lib/`, `app/`, `node_modules/`, `constellation.config.json`). Always equals `process.cwd()` for the supervisor and its child processes — the daemon and Next inherit cwd from `npm run dev`.
+- *Target root* — the repo being visualized (`.constellation/agents/`, `.claude/hooks/constellation/`, the source files that become tiles). Resolved via `resolveTargetRoot()` in `lib/config.ts`, which reads `CONSTELLATION_TARGET_ROOT` and falls back to `process.cwd()` (with a one-time stderr warning) when unset.
+
+`loadConfig(installRoot)` reads from the install dir; `resolveStateDir(targetRoot)` joins onto the target. Single-repo dev (`npm run dev` in this repo, no env var) keeps working because both roots collapse to cwd.
+
 ## Current snapshot
 
 As of the last update to this file:

@@ -10,7 +10,7 @@
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { loadConfig } from "../lib/config";
+import { loadConfig, resolveTargetRoot } from "../lib/config";
 import { Lifecycle } from "./lifecycle";
 import { TranscriptWatcher } from "./transcripts";
 import { DiskSync } from "./disk-sync";
@@ -19,10 +19,13 @@ import { startServer } from "./server";
 import { clearAgentFiles } from "./atomic-write";
 
 async function main() {
+  // Config (port, watchedTools, ttl) is install-rooted — we read it from the
+  // supervisor's cwd. State (lifecycle JSON, pidfile) is target-rooted —
+  // it lives next to the repo being visualized.
   const config = loadConfig();
-  const root = process.cwd();
-  const stateDir = path.join(root, config.stateDir);
-  const pidFile = path.join(root, config.daemon.pidFile);
+  const targetRoot = resolveTargetRoot();
+  const stateDir = path.join(targetRoot, config.stateDir);
+  const pidFile = path.join(targetRoot, config.daemon.pidFile);
 
   if (process.env.CONST_FRESH === "1") {
     await clearAgentFiles(stateDir);

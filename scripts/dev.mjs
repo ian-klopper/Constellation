@@ -10,11 +10,31 @@ import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-const ROOT = process.cwd();
+// INSTALL_ROOT = where Constellation's code lives (this script's cwd).
+// TARGET_ROOT  = the repo being visualized. Equal to INSTALL_ROOT in
+// single-repo dev; set via CONSTELLATION_TARGET_ROOT under sibling-clone.
+const INSTALL_ROOT = process.cwd();
+const TARGET_ROOT = process.env.CONSTELLATION_TARGET_ROOT ?? INSTALL_ROOT;
+
+if (
+  process.env.CONSTELLATION_TARGET_ROOT !== undefined &&
+  !path.isAbsolute(process.env.CONSTELLATION_TARGET_ROOT)
+) {
+  console.error(
+    `[supervisor] CONSTELLATION_TARGET_ROOT must be an absolute path; got ${JSON.stringify(
+      process.env.CONSTELLATION_TARGET_ROOT,
+    )}`,
+  );
+  process.exit(1);
+}
+
 const config = JSON.parse(
-  await readFile(path.join(ROOT, "constellation.config.json"), "utf8"),
+  await readFile(path.join(INSTALL_ROOT, "constellation.config.json"), "utf8"),
 );
-const PID_FILE = path.join(ROOT, config.daemon.pidFile);
+// Pidfile lives next to the lifecycle state — both target-rooted, so
+// stopping the supervisor in repo A and starting it in repo B doesn't
+// trip the "daemon already running" check on a stale file from A.
+const PID_FILE = path.join(TARGET_ROOT, config.daemon.pidFile);
 
 function daemonAlreadyRunning() {
   if (!existsSync(PID_FILE)) return false;
@@ -37,7 +57,7 @@ function startDaemon() {
   }
   const env = { ...process.env, CONST_FRESH: "1" };
   const proc = spawn("npx", ["tsx", "daemon/index.ts"], {
-    cwd: ROOT,
+    cwd: INSTALL_ROOT,
     env,
     stdio: ["ignore", "inherit", "inherit"],
   });
@@ -50,7 +70,7 @@ function startDaemon() {
 
 function startNext() {
   const proc = spawn("npx", ["next", "dev"], {
-    cwd: ROOT,
+    cwd: INSTALL_ROOT,
     stdio: "inherit",
   });
   children.push(proc);
@@ -80,6 +100,10 @@ function shutdown() {
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+
+if (TARGET_ROOT !== INSTALL_ROOT) {
+  console.log(`[supervisor] target = ${TARGET_ROOT}`);
+}
 
 startDaemon();
 startNext();

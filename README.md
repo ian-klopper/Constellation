@@ -16,10 +16,21 @@ This is the supported install path for visualizing your own codebase. Open [Clau
 
 You'll be asked for confirmation at three checkpoints — settings merge, optional feedback skill, and the description writer. Default for each is **no**; Claude won't write anything you didn't approve.
 
-> **Maintainer note (release time):** Replace every occurrence of `<PINNED-SHA>` in the block below with the release commit's SHA before tagging. The pin is what gives the install integrity guarantees described in the prompt.
+> **Maintainer note:** Replace `<PINNED-SHA>` (one occurrence — the `CONSTELLATION_REF=` line) with the release commit's SHA before tagging. During pre-release dogfooding, you can substitute a branch name (e.g. `feat/foo`) instead — the prompt detects that case and skips the integrity check with an explicit log line. If the literal token `<PINNED-SHA>` makes it through to the agent, the agent will refuse to proceed.
 
 ```text
 You are installing Constellation against the current working directory (the user's repo, hereafter TARGET). Execute the steps below in order. Stop and surface the error to the user on any failure — do not silently retry, skip, or work around.
+
+# 0. Resolve the install ref
+
+    CONSTELLATION_REF=<PINNED-SHA>
+
+The line above is the only thing the maintainer fills in per release. It's either:
+
+- A 40-character commit SHA (release path) — step 2 verifies the install landed on it exactly. Strong supply-chain integrity: the pinned SHA travels with the lockfile, and `npm ci` against that lockfile is what we vouched for.
+- A branch name like `feat/foo` (pre-release / dogfood path) — step 2 fetches whatever's at that branch's HEAD and skips the integrity check with an explicit log line. The user has explicitly opted into trusting moving HEAD.
+
+If `CONSTELLATION_REF` is the literal token `<PINNED-SHA>`, the maintainer didn't substitute. Stop and ask the user: "The install prompt has an unresolved `<PINNED-SHA>` placeholder. Substitute either a 40-character commit SHA (release) or a branch name like `feat/foo` (dogfood) and re-paste, OR tell me a ref to use right now and I'll continue." Do not invent a default; do not fall through to `main`.
 
 # 1. Preflight
 
@@ -39,27 +50,38 @@ Ask the user where to clone Constellation, suggesting these three paths (no defa
 
 Call the chosen path INSTALL_DIR.
 
+First, classify `$CONSTELLATION_REF`:
+
+  - If it matches `^[0-9a-f]{40}$` (40 hex chars), it's a pinned SHA → integrity check ENABLED.
+  - Otherwise, treat it as a git ref name (branch or tag) → integrity check SKIPPED with a log line.
+
 If INSTALL_DIR exists and is already a Constellation clone (its `package.json` has `"name": "constellation"`):
-  - If `git -C "$INSTALL_DIR" rev-parse HEAD` equals <PINNED-SHA>, treat the install as ready and skip to step 3.
-  - Otherwise ask: "Update existing Constellation install to the pinned SHA? [y/N]". On `y`, run:
-        git -C "$INSTALL_DIR" fetch --depth 1 origin <PINNED-SHA>
-        git -C "$INSTALL_DIR" checkout <PINNED-SHA>
+  - For a pinned SHA: if `git -C "$INSTALL_DIR" rev-parse HEAD` equals `$CONSTELLATION_REF`, treat the install as ready and skip to step 3.
+  - For a branch ref: always treat as needing refresh (branches move; cheap to re-fetch).
+  - Ask: "Update existing Constellation install to ref `$CONSTELLATION_REF`? [y/N]". On `y`, run:
+        git -C "$INSTALL_DIR" fetch --depth 1 origin "$CONSTELLATION_REF"
+        git -C "$INSTALL_DIR" checkout FETCH_HEAD
         npm ci --prefix "$INSTALL_DIR"
     On anything else, abort.
 
 If INSTALL_DIR exists but is NOT a Constellation clone, refuse: "Path is not empty and isn't a Constellation install. Pick a different path." Ask again.
 
-If INSTALL_DIR doesn't exist, clone it pinned to the release SHA:
+If INSTALL_DIR doesn't exist, clone it pinned to the ref:
 
     git clone --depth 1 https://github.com/ian-klopper/Constellation.git "$INSTALL_DIR"
-    git -C "$INSTALL_DIR" fetch --depth 1 origin <PINNED-SHA>
-    git -C "$INSTALL_DIR" checkout <PINNED-SHA>
+    git -C "$INSTALL_DIR" fetch --depth 1 origin "$CONSTELLATION_REF"
+    git -C "$INSTALL_DIR" checkout FETCH_HEAD
 
-Verify the SHA exactly. Abort on mismatch — do NOT proceed:
+If `$CONSTELLATION_REF` is a pinned SHA, verify the install landed on it exactly. Abort on mismatch — do NOT proceed:
 
     actual="$(git -C "$INSTALL_DIR" rev-parse HEAD)"
-    test "$actual" = "<PINNED-SHA>" \
-      || { echo "Constellation clone landed at $actual, expected <PINNED-SHA>. Your README may be stale — re-paste from the latest release."; exit 1; }
+    test "$actual" = "$CONSTELLATION_REF" \
+      || { echo "Constellation clone landed at $actual, expected $CONSTELLATION_REF. Your README may be stale — re-paste from the latest release."; exit 1; }
+
+If `$CONSTELLATION_REF` is a branch ref, log instead and continue:
+
+    actual="$(git -C "$INSTALL_DIR" rev-parse HEAD)"
+    echo "[constellation] using branch ref '$CONSTELLATION_REF' (HEAD=$actual) — integrity check skipped (not a pinned SHA)."
 
 Install dependencies. Do NOT pass `--ignore-scripts` (Constellation's daemon depends on `tsx`, which runs install scripts):
 

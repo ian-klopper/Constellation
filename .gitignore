@@ -38,3 +38,6 @@ next-env.d.ts
 
 # Compound Engineering — local-only config
 .compound-engineering/*.local.yaml
+
+# Compound Engineering — per-run review artifacts (per-reviewer JSON, etc.)
+.context/

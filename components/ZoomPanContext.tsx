@@ -46,31 +46,25 @@ export function useZoomPan(): ZoomPanContextValue {
   return ctx;
 }
 
-// Pan clamp: at zoom=1 the canvas exactly fills the viewport, so any non-
-// zero pan would expose empty space — force (0,0). At higher zooms allow
-// pan such that at least `margin * min(viewportW, viewportH)` of the
-// canvas remains in view per axis.
-//
-// The math: the scaled canvas occupies the rect [pan.x, pan.x + viewportW *
-// zoom] × [pan.y, pan.y + viewportH * zoom] in viewport coords. Constraints:
-//   pan.x + viewportW * zoom >= minVisible       (don't pan canvas off the right)
-//   pan.x <= viewportW - minVisible              (don't pan canvas off the left)
-// (Symmetric for y.)
+// Pan clamp: strict no-overflow. The scaled canvas occupies the rect
+// [pan.x, pan.x + viewportW * zoom] × [pan.y, pan.y + viewportH * zoom] in
+// viewport coords. To make the canvas always cover the viewport (no
+// background bleed at any edge):
+//   pan.x ≤ 0                              (don't expose empty space on the left)
+//   pan.x + viewportW * zoom ≥ viewportW   (don't expose empty space on the right)
+// ⇒ pan.x ∈ [viewportW * (1 − zoom), 0]. Symmetric for y. At zoom=1 both
+// bounds collapse to 0, which is the intended fixed point.
 export function clampPan(
   pan: { x: number; y: number },
   zoom: number,
   viewportW: number,
   viewportH: number,
-  margin: number,
 ): { x: number; y: number } {
   if (zoom <= 1) return { x: 0, y: 0 };
-  const minVisible = margin * Math.min(viewportW, viewportH);
-  const minX = minVisible - viewportW * zoom;
-  const maxX = viewportW - minVisible;
-  const minY = minVisible - viewportH * zoom;
-  const maxY = viewportH - minVisible;
+  const minX = viewportW * (1 - zoom);
+  const minY = viewportH * (1 - zoom);
   return {
-    x: Math.min(maxX, Math.max(minX, pan.x)),
-    y: Math.min(maxY, Math.max(minY, pan.y)),
+    x: Math.min(0, Math.max(minX, pan.x)),
+    y: Math.min(0, Math.max(minY, pan.y)),
   };
 }

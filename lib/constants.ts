@@ -91,10 +91,6 @@ export const ZOOM = {
   // click and trackpad ticks (deltaY ~5) feel like ~1.025× — both feel
   // right without a modifier semantic.
   SENSITIVITY: 0.005,
-  // Pan clamp: at zooms above 1, allow pan such that at least this fraction
-  // of the canvas's smaller dimension stays in view per axis. 0.3 is a
-  // starting point; soften (0.5) or tighten (0.1) by feel.
-  PAN_CLAMP_MARGIN: 0.3,
   // committedZoom (the React state TreemapNode's LOD gate reads) updates
   // only when the live zoom diverges from it by ≥ this fraction. Keeps
   // TreemapNode reconciliation rare during continuous gestures — a wheel

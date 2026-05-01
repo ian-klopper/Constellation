@@ -33,7 +33,6 @@ import type { CodebaseTree } from "@/lib/types";
 const ZOOM_MIN = 1;
 const ZOOM_MAX = 8;
 const ZOOM_SENSITIVITY = 0.005;
-const PAN_CLAMP_MARGIN = 0.3;
 
 export function ZoomPerfClient({ tree }: { tree: CodebaseTree }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -252,8 +251,9 @@ export function ZoomPerfClient({ tree }: { tree: CodebaseTree }) {
 const EMPTY_SET: Set<string> = new Set();
 
 // Pan clamp: at zoom=1 the layout fills the viewport, so pan must be (0,0).
-// At higher zooms allow pan such that at least PAN_CLAMP_MARGIN * smaller-
-// dimension stays visible per axis.
+// At higher zooms enforce strict no-overflow — the canvas always covers
+// the viewport, no background bleed at any edge. Mirrors components/
+// ZoomPanContext.tsx so the bench reflects production behavior.
 function clampPan(
   pan: { x: number; y: number },
   zoom: number,
@@ -261,13 +261,10 @@ function clampPan(
   viewportH: number,
 ): { x: number; y: number } {
   if (zoom <= 1) return { x: 0, y: 0 };
-  const minVisible = PAN_CLAMP_MARGIN * Math.min(viewportW, viewportH);
-  const minX = minVisible - viewportW * zoom;
-  const maxX = viewportW - minVisible;
-  const minY = minVisible - viewportH * zoom;
-  const maxY = viewportH - minVisible;
+  const minX = viewportW * (1 - zoom);
+  const minY = viewportH * (1 - zoom);
   return {
-    x: Math.min(maxX, Math.max(minX, pan.x)),
-    y: Math.min(maxY, Math.max(minY, pan.y)),
+    x: Math.min(0, Math.max(minX, pan.x)),
+    y: Math.min(0, Math.max(minY, pan.y)),
   };
 }

@@ -110,7 +110,6 @@ export function Visualizer({
             liveRef.current.zoom,
             sz.w,
             sz.h,
-            ZOOM.PAN_CLAMP_MARGIN,
           ),
         };
       }
@@ -155,7 +154,6 @@ export function Visualizer({
           liveRef.current.zoom,
           width,
           height,
-          ZOOM.PAN_CLAMP_MARGIN,
         ),
       };
       scheduleFrame();
@@ -212,7 +210,6 @@ export function Visualizer({
           newZoom,
           rect.width,
           rect.height,
-          ZOOM.PAN_CLAMP_MARGIN,
         ),
       };
       scheduleFrame();
@@ -285,7 +282,6 @@ export function Visualizer({
             z,
             rect.width,
             rect.height,
-            ZOOM.PAN_CLAMP_MARGIN,
           ),
         };
         scheduleFrame();

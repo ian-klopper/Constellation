@@ -12,6 +12,7 @@ import { memo, useMemo } from "react";
 import { squarify } from "@/lib/treemap";
 import { TREEMAP } from "@/lib/constants";
 import { useHover } from "./HoverContext";
+import { useLod } from "./LodContext";
 import { useRegisterTile } from "./TileRegistry";
 import { useZoomPan } from "./ZoomPanContext";
 import type { TreeNode } from "@/lib/types";
@@ -19,7 +20,6 @@ import type { TreeNode } from "@/lib/types";
 const {
   LABEL_HEIGHT,
   INNER_PAD,
-  MIN_RENDER,
   TINTS,
   DESCRIPTION_LINE_HEIGHT,
   DESCRIPTION_PADDING_Y,
@@ -52,6 +52,9 @@ function TreemapNodeImpl({ node, x, y, w, h, depth, tint }: Props) {
   // *not* swap to getLive().zoom: the whole point of the ref-driven
   // architecture is to keep continuous zoom values out of TreemapNode.
   const { committedZoom } = useZoomPan();
+  // User-tunable LOD floor. Defaults to TREEMAP.MIN_RENDER (8 px); the
+  // header DetailSlider writes new values which reflow the gate live.
+  const { minRender } = useLod();
 
   const style = {
     position: "absolute" as const,
@@ -81,12 +84,11 @@ function TreemapNodeImpl({ node, x, y, w, h, depth, tint }: Props) {
         h: h - LABEL_HEIGHT - 2 * INNER_PAD,
       };
 
-  // Zoom-aware gate: as the user zooms in, more children clear MIN_RENDER
-  // and become visible; zooming out culls them. At zoom=1 the gate is
-  // identical to the legacy `inner.w >= MIN_RENDER` check, so the home
-  // page is pixel-identical to the pre-zoom version on first load.
-  // Hidden children's area is silently absorbed by the parent — the
-  // directory background fills the gap (no "+N hidden" placeholder).
+  // Zoom-aware gate: as the user zooms in, more children clear `minRender`
+  // and become visible; zooming out culls them. At zoom=1 the gate
+  // matches the legacy `inner.w >= minRender` check exactly. Hidden
+  // children's area is silently absorbed by the parent — the directory
+  // background fills the gap (no "+N hidden" placeholder).
   //
   // Description line-clamp math (in FileTile below) intentionally stays
   // in *layout-px*, not zoom-aware px. Zooming scales the rendered text
@@ -95,8 +97,8 @@ function TreemapNodeImpl({ node, x, y, w, h, depth, tint }: Props) {
   const renderW = inner.w * committedZoom;
   const renderH = inner.h * committedZoom;
   const canRender =
-    renderW >= MIN_RENDER &&
-    renderH >= MIN_RENDER &&
+    renderW >= minRender &&
+    renderH >= minRender &&
     node.children.length > 0;
 
   // Memoize squarify on the actually-changing inputs: the children array's

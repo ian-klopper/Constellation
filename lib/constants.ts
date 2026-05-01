@@ -17,6 +17,10 @@ export const TREEMAP = {
   // FileTile header (filename row): text-[11px] + py-1 + border-b. Conservative
   // value so the line-clamp math under-promises rather than over-promises.
   FILE_TILE_HEADER_HEIGHT: 24,
+  // Total vertical padding on the description <p> (Tailwind py-1.5 = 6px each
+  // side). Stored as the total — not per-side — so the line-clamp math reads
+  // `h - HEADER - PADDING_Y` directly without a 2x multiplier foot-gun.
+  DESCRIPTION_PADDING_Y: 12,
   // Top-level directory background tints. Subdirectories inherit their parent's.
   TINTS: {
     app: "bg-[#eef2f7]",

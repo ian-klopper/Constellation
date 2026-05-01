@@ -92,7 +92,7 @@ export function Visualizer({ tree }: { tree: CodebaseTree }) {
     () => ({
       hoveredPath,
       pinnedPath,
-      pinnedPos,
+      activePath,
       inputs,
       outputs,
       setHover,
@@ -102,7 +102,7 @@ export function Visualizer({ tree }: { tree: CodebaseTree }) {
     [
       hoveredPath,
       pinnedPath,
-      pinnedPos,
+      activePath,
       inputs,
       outputs,
       setHover,

@@ -82,22 +82,46 @@ export function PinController() {
   }, [setPinned]);
 
   // Re-anchor on resize: treemap reflow may move the pinned tile, so re-read
-  // its rect via the registry and recenter the pin position. The auto-clear
-  // effect in Visualizer handles the case where the tile is gone entirely.
+  // its rect via the registry and recenter the pin position. The window
+  // 'resize' event fires synchronously *before* React's ResizeObserver-driven
+  // re-render and the squarify pass commit, so reading the rect inside the
+  // event handler returns the pre-reflow position. Defer to the next-next
+  // animation frame: by then React has committed and layout reflects the
+  // post-reflow tile rect. (Single rAF can race React's commit; double rAF
+  // is the canonical "after the next paint" pattern.) Coalesces rapid
+  // resizes by cancelling outstanding frames before queuing new ones.
+  // Empty deps + pinnedPathRef gating mirror the Esc / click effects above
+  // and avoid attach/detach churn on every pin toggle.
   useEffect(() => {
-    if (!pinnedPath) return;
+    let raf1: number | null = null;
+    let raf2: number | null = null;
     const onResize = () => {
-      const tileEl = registry.get(pinnedPath);
-      if (!tileEl) return;
-      const rect = tileEl.getBoundingClientRect();
-      setPinned(pinnedPath, {
-        x: rect.left + rect.width / 2,
-        y: rect.top + rect.height / 2,
+      if (pinnedPathRef.current === null) return;
+      if (raf1 !== null) cancelAnimationFrame(raf1);
+      raf1 = requestAnimationFrame(() => {
+        if (raf2 !== null) cancelAnimationFrame(raf2);
+        raf2 = requestAnimationFrame(() => {
+          raf1 = null;
+          raf2 = null;
+          const path = pinnedPathRef.current;
+          if (!path) return;
+          const tileEl = registry.get(path);
+          if (!tileEl) return;
+          const rect = tileEl.getBoundingClientRect();
+          setPinned(path, {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+          });
+        });
       });
     };
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [pinnedPath, registry, setPinned]);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      if (raf1 !== null) cancelAnimationFrame(raf1);
+      if (raf2 !== null) cancelAnimationFrame(raf2);
+    };
+  }, [registry, setPinned]);
 
   return null;
 }

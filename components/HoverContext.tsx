@@ -19,7 +19,10 @@ export type Pos = { x: number; y: number };
 export type HoverContextValue = {
   hoveredPath: string | null;
   pinnedPath: string | null;
-  pinnedPos: Pos | null;
+  // pinnedPath ?? hoveredPath — single source of truth for "which file is
+  // selected right now". Lifted into context so FileTile and Visualizer
+  // never compute it independently.
+  activePath: string | null;
   inputs: Set<string>;
   outputs: Set<string>;
   setHover: (path: string | null, pos?: Pos) => void;

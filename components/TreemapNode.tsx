@@ -20,10 +20,9 @@ const {
   MIN_RENDER,
   TINTS,
   DESCRIPTION_LINE_HEIGHT,
+  DESCRIPTION_PADDING_Y,
   FILE_TILE_HEADER_HEIGHT,
 } = TREEMAP;
-// Vertical padding on the description <p> (matches Tailwind py-1.5).
-const DESCRIPTION_PADDING_Y = 6;
 
 type Props = {
   node: TreeNode;
@@ -119,6 +118,7 @@ function FileTile({
   const {
     hoveredPath,
     pinnedPath,
+    activePath,
     inputs,
     outputs,
     setHover,
@@ -133,7 +133,6 @@ function FileTile({
   const isHovered = pinnedPath === null && hoveredPath === node.path;
   const isInput = inputs.has(node.path);
   const isOutput = outputs.has(node.path);
-  const activePath = pinnedPath ?? hoveredPath;
   const isUnrelated =
     activePath !== null && !isPinned && !isHovered && !isInput && !isOutput;
 
@@ -149,7 +148,7 @@ function FileTile({
             ? "tile-dim"
             : "";
 
-  const availableH = h - FILE_TILE_HEADER_HEIGHT - 2 * DESCRIPTION_PADDING_Y;
+  const availableH = h - FILE_TILE_HEADER_HEIGHT - DESCRIPTION_PADDING_Y;
   const lines = Math.floor(availableH / DESCRIPTION_LINE_HEIGHT);
   const showDescription = lines >= 1 && Boolean(node.description);
 
@@ -165,8 +164,7 @@ function FileTile({
         // stopPropagation: the document-level click handler in PinController
         // uses closest('[data-path]') to know we already handled it, and
         // stopPropagation wouldn't stop window-level listeners anyway.
-        const isCurrentlyPinned = pinnedPath === node.path;
-        setPinned(isCurrentlyPinned ? null : node.path, {
+        setPinned(isPinned ? null : node.path, {
           x: e.clientX,
           y: e.clientY,
         });

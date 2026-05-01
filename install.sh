@@ -15,6 +15,13 @@
 set -euo pipefail
 
 REPO_URL="https://github.com/ian-klopper/Constellation.git"
+# Which branch / tag / SHA to clone or update to. Defaults to main; set
+# to a branch name (e.g. CONSTELLATION_REF=feat/ai-onboarding-flow) to
+# test pre-merge changes. The matching install.sh and the cloned tree
+# need to be on the same ref — install.sh post-step-7 expects the
+# clone to contain scripts/install-settings.mjs, which a stale ref
+# may be missing.
+REF="${CONSTELLATION_REF:-main}"
 TARGET="$PWD"
 
 say() { printf '%s\n' "$*"; }
@@ -93,19 +100,41 @@ fi
 if [ -e "$INSTALL_DIR" ]; then
   if [ -f "$INSTALL_DIR/package.json" ] && [ "$(jq -r .name "$INSTALL_DIR/package.json" 2>/dev/null)" = "constellation" ]; then
     say ""
-    say "Existing Constellation install found at $INSTALL_DIR."
-    ask 'Update it (git fetch + checkout main)? [y/N]: ' n
+    say "Existing Constellation install found at $INSTALL_DIR (current ref tracking $REF)."
+    ask "Update it (git fetch + checkout origin/$REF)? [y/N]: " n
     case "$REPLY" in
-      y|Y|yes) git -C "$INSTALL_DIR" fetch --depth 1 origin main && git -C "$INSTALL_DIR" checkout origin/main ;;
-      *) say "Skipping update." ;;
+      y|Y|yes)
+        git -C "$INSTALL_DIR" fetch --depth 1 origin "$REF" \
+          && git -C "$INSTALL_DIR" checkout "origin/$REF"
+        ;;
+      *) say "Skipping update — make sure $INSTALL_DIR is already on $REF." ;;
     esac
   else
     fail "$INSTALL_DIR exists but isn't a Constellation clone. Pick a different path."
   fi
 else
   say ""
-  say "Cloning Constellation into $INSTALL_DIR ..."
-  git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
+  say "Cloning Constellation ($REF) into $INSTALL_DIR ..."
+  if [ "$REF" = "main" ]; then
+    git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
+  else
+    # Non-main ref: clone shallow on main, then fetch and check out the
+    # requested ref. Avoids needing to know whether the ref is a branch,
+    # tag, or SHA at clone time.
+    git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
+    git -C "$INSTALL_DIR" fetch --depth 1 origin "$REF"
+    git -C "$INSTALL_DIR" checkout "origin/$REF"
+  fi
+fi
+
+# Sanity check: the merge script (added in feat/ai-onboarding-flow) is
+# load-bearing for step 8. If it's missing, the install dir is on a ref
+# that predates it — bail out with a hint rather than exploding later.
+if [ ! -f "$INSTALL_DIR/scripts/install-settings.mjs" ]; then
+  fail "Your Constellation install at $INSTALL_DIR is missing scripts/install-settings.mjs.
+The cloned tree is on a ref that predates the deterministic settings merger.
+Re-run with CONSTELLATION_REF=<branch> set to a ref that has it (e.g. feat/ai-onboarding-flow), or update the clone manually:
+  git -C $INSTALL_DIR fetch origin && git -C $INSTALL_DIR checkout <branch>"
 fi
 
 # 6. Install deps ------------------------------------------------------------

@@ -351,6 +351,39 @@ export function Visualizer({
     };
   }, [scheduleFrame, setHover, setPinned]);
 
+  // 'f' = fit-to-viewport reset. Instant, no easing. Does NOT unpin —
+  // Esc is the unpin shortcut, owned by PinController. Skips when the
+  // user is typing in an editable element so 'f' in a search box isn't
+  // intercepted.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "f" && e.key !== "F") return;
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      if (target) {
+        const tag = target.tagName;
+        if (
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          tag === "SELECT" ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+      }
+      e.preventDefault();
+      liveRef.current = { zoom: 1, pan: { x: 0, y: 0 } };
+      // Force-commit committedZoom in the same tick so any tiles that were
+      // culled at higher zoom render again on the next frame, instead of
+      // waiting for the next 5%-quantum crossing (which doesn't happen at
+      // zoom=1 with no further gesture).
+      committedZoomRef.current = 1;
+      setCommittedZoom(1);
+      scheduleFrame();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [scheduleFrame]);
+
   const filesByPath = useMemo(() => {
     const map = new Map<string, FileNode>();
     walk(tree.tree, map);

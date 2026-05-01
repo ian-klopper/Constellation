@@ -2,7 +2,16 @@
  * The little card that pops up next to your cursor when you hover a file.
  * Shows what the file does, the things it shares with the rest of the app,
  * and which other files it pulls from or is pulled by.
+ *
+ * The panel is pointer-interactive so its content can be wheel-scrolled and
+ * its text selected. In hover mode the panel edge-touches the cursor (zero
+ * offset) so there's no gap for the cursor to traverse and hover survival
+ * works reliably; in pin mode it keeps a 16px offset so it doesn't cover
+ * the click target.
  */
+"use client";
+
+import { useEffect, useRef } from "react";
 import { SymbolRow } from "./SymbolRow";
 import { HOVER_PANEL } from "@/lib/constants";
 import type { FileNode } from "@/lib/types";
@@ -18,49 +27,80 @@ const {
   MIN_BELOW_BEFORE_FLIP,
 } = HOVER_PANEL;
 
+type Pos = { x: number; y: number };
+
 export function HoverPanel({
   file,
   mousePos,
+  pinned = false,
+  pinnedPos = null,
 }: {
   file: FileNode | null;
-  mousePos: { x: number; y: number } | null;
+  mousePos: Pos | null;
+  pinned?: boolean;
+  pinnedPos?: Pos | null;
 }) {
-  if (!file || !mousePos) return null;
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Reset scrollTop on file change without remounting the panel. A keyed
+  // remount (key={file.path}) would destroy the DOM element on every hover
+  // transition, causing visible flicker and breaking the no-flash promise
+  // for re-pin (R10).
+  useEffect(() => {
+    scrollRef.current?.scrollTo(0, 0);
+  }, [file?.path]);
+
+  const pos = pinned ? pinnedPos : mousePos;
+  if (!file || !pos) return null;
+
+  // Hover mode: zero offset so the panel touches the cursor — no gap to
+  // traverse means relatedTarget-based hover survival works reliably.
+  // Pin mode: keep the offset so the panel doesn't cover the click target.
+  const effectiveOffset = pinned ? CURSOR_OFFSET : 0;
 
   const winW = typeof window !== "undefined" ? window.innerWidth : FALLBACK_WIN_W;
   const winH = typeof window !== "undefined" ? window.innerHeight : FALLBACK_WIN_H;
 
-  // Horizontal: default to the right of the cursor; flip to the left if the
+  // Horizontal: default to the right of the anchor; flip to the left if the
   // (fixed-width) panel would run off the right edge.
-  let left = mousePos.x + CURSOR_OFFSET;
+  let left = pos.x + effectiveOffset;
   if (left + PANEL_WIDTH > winW - VIEWPORT_PADDING) {
-    left = mousePos.x - PANEL_WIDTH - CURSOR_OFFSET;
+    left = pos.x - PANEL_WIDTH - effectiveOffset;
   }
   if (left < VIEWPORT_PADDING) left = VIEWPORT_PADDING;
 
   // Vertical: panel height depends on content, so we can't pre-compute it.
-  // Trick: when flipping above the cursor, set top to (cursorY - offset) and
+  // Trick: when flipping above the anchor, set top to (anchorY - offset) and
   // apply translateY(-100%) so the panel's *bottom* anchors there. That way
-  // the near edge stays close to the cursor regardless of how tall the
+  // the near edge stays close to the anchor regardless of how tall the
   // panel ends up — no leaping up to the top of the screen on short panels.
-  const spaceBelow = winH - mousePos.y - CURSOR_OFFSET - VIEWPORT_PADDING;
-  const spaceAbove = mousePos.y - CURSOR_OFFSET - VIEWPORT_PADDING;
+  const spaceBelow = winH - pos.y - effectiveOffset - VIEWPORT_PADDING;
+  const spaceAbove = pos.y - effectiveOffset - VIEWPORT_PADDING;
   const flipUp =
     spaceBelow < MIN_BELOW_BEFORE_FLIP && spaceAbove > spaceBelow;
 
-  const top = flipUp
-    ? mousePos.y - CURSOR_OFFSET
-    : mousePos.y + CURSOR_OFFSET;
+  let top = flipUp ? pos.y - effectiveOffset : pos.y + effectiveOffset;
   const maxH = Math.max(
     MIN_MAX_H,
     Math.min(PANEL_HARD_MAX_H, flipUp ? spaceAbove : spaceBelow),
   );
   const transform = flipUp ? "translateY(-100%)" : undefined;
 
+  // Final viewport-edge safety. flipUp/maxH already cover the common cases;
+  // this catches corners (very short viewports, anchor in a corner) where
+  // the rendered rect could still leak past the edge.
+  if (flipUp) {
+    if (top - maxH < VIEWPORT_PADDING) top = VIEWPORT_PADDING + maxH;
+  } else if (top < VIEWPORT_PADDING) {
+    top = VIEWPORT_PADDING;
+  }
+
   return (
     <div
+      ref={scrollRef}
+      data-hover-panel
       style={{ left, top, width: PANEL_WIDTH, maxHeight: maxH, transform }}
-      className="pointer-events-none fixed z-40 overflow-y-auto rounded-sm border border-zinc-300 bg-white/95 p-3 text-[11px] text-zinc-800 shadow-lg backdrop-blur-sm"
+      className="fixed z-40 overflow-y-auto rounded-sm border border-zinc-300 bg-white/95 p-3 text-[11px] text-zinc-800 shadow-lg backdrop-blur-sm"
     >
       <div className="mb-1 text-[10px] uppercase tracking-[0.15em] text-zinc-500">
         {file.path}

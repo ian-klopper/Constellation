@@ -5,6 +5,7 @@
  */
 import type { Metadata } from "next";
 import { IBM_Plex_Mono } from "next/font/google";
+import { LodProvider } from "@/components/LodContext";
 import "./globals.css";
 
 const mono = IBM_Plex_Mono({
@@ -25,7 +26,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={mono.variable}>
-      <body className="font-mono antialiased">{children}</body>
+      <body className="font-mono antialiased">
+        <LodProvider>{children}</LodProvider>
+      </body>
     </html>
   );
 }

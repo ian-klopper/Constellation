@@ -8,16 +8,18 @@
  */
 "use client";
 
+import { memo, useMemo } from "react";
 import { squarify } from "@/lib/treemap";
 import { TREEMAP } from "@/lib/constants";
 import { useHover } from "./HoverContext";
+import { useLod } from "./LodContext";
 import { useRegisterTile } from "./TileRegistry";
+import { useZoomPan } from "./ZoomPanContext";
 import type { TreeNode } from "@/lib/types";
 
 const {
   LABEL_HEIGHT,
   INNER_PAD,
-  MIN_RENDER,
   TINTS,
   DESCRIPTION_LINE_HEIGHT,
   DESCRIPTION_PADDING_Y,
@@ -35,7 +37,35 @@ type Props = {
   tint: string | null;
 };
 
-export function TreemapNode({ node, x, y, w, h, depth, tint }: Props) {
+// Memoized so a Visualizer re-render that doesn't change layout-px props or
+// committedZoom (e.g., pinnedPos updates while panning) skips re-executing
+// the entire recursive tree. Context changes (HoverContext, ZoomPanContext)
+// still propagate to consumers below — useHover in FileTile and useZoomPan
+// here both bypass memo. This is the load-bearing perf optimization that
+// lets PinController call setPinned on every transform tick without
+// blowing up the render budget on Parsley-scale repos.
+export const TreemapNode = memo(TreemapNodeImpl);
+
+function TreemapNodeImpl({ node, x, y, w, h, depth, tint }: Props) {
+  // committedZoom is React state — updates only on LOD_COMMIT_QUANTUM
+  // crossings, so this hook does NOT cause per-detent reconciliation. Do
+  // *not* swap to getLive().zoom: the whole point of the ref-driven
+  // architecture is to keep continuous zoom values out of TreemapNode.
+  const { committedZoom } = useZoomPan();
+  // User-tunable LOD floor. Defaults to level 38 (≈ 8 px); the header
+  // DetailSlider writes new values which reflow the gate live.
+  const { minRender } = useLod();
+
+  // Per-tile LOD gate. A tile (file *or* directory) below this floor is
+  // skipped entirely — its area becomes empty space inside its parent.
+  // The root (depth = 0) is exempt so the visualization is never empty.
+  // Without this, the gate only culls a directory's *children*, leaving
+  // the directory's own label tile rendering at any size — which made
+  // the slider feel like it "didn't affect all the boxes".
+  const tooSmall =
+    depth > 0 &&
+    (w * committedZoom < minRender || h * committedZoom < minRender);
+
   const style = {
     position: "absolute" as const,
     left: x,
@@ -45,6 +75,7 @@ export function TreemapNode({ node, x, y, w, h, depth, tint }: Props) {
   };
 
   if (node.kind === "file") {
+    if (tooSmall) return null;
     return <FileTile node={node} style={style} h={h} />;
   }
 
@@ -64,17 +95,49 @@ export function TreemapNode({ node, x, y, w, h, depth, tint }: Props) {
         h: h - LABEL_HEIGHT - 2 * INNER_PAD,
       };
 
+  // Children-expansion gate: even if this directory's own tile clears the
+  // per-tile floor, lay out children only when the *inner* area also does.
+  // Otherwise the directory shows just its label and absorbs the empty
+  // space — no "+N hidden" placeholder. tooSmall folds in here too so a
+  // tile we're about to skip doesn't waste work on squarify.
+  //
+  // Description line-clamp math (in FileTile below) intentionally stays
+  // in layout-px. Zoom doesn't change the *number* of description lines;
+  // full zoom-aware line-count is a deferred follow-up.
+  const renderW = inner.w * committedZoom;
+  const renderH = inner.h * committedZoom;
   const canRender =
-    inner.w >= MIN_RENDER && inner.h >= MIN_RENDER && node.children.length > 0;
+    !tooSmall &&
+    renderW >= minRender &&
+    renderH >= minRender &&
+    node.children.length > 0;
 
-  const childRects = canRender
-    ? squarify(
-        node.children.map((c) => ({
-          value: c.kind === "file" ? c.lines : c.totalLines,
-        })),
-        inner,
-      )
-    : [];
+  // Memoize squarify on the actually-changing inputs: the children array's
+  // *reference* (stable for a given tree, busts only when the scan re-runs)
+  // plus the four primitive rect scalars. Keying on node.children rather
+  // than the freshly-constructed items array dodges the "new array literal
+  // every render" footgun that would defeat the memo.
+  //
+  // The `items` array is built *inside* the memo body for the same reason —
+  // closing over the constructed array would key the memo on a fresh
+  // reference each render. canRender is part of the deps so the empty-array
+  // branch participates in the cache too (avoids re-running squarify on a
+  // shrunken rect once it falls below MIN_RENDER and back).
+  const childRects = useMemo(
+    () => {
+      if (!canRender) return [] as ReturnType<typeof squarify>;
+      const items = node.children.map((c) => ({
+        value: c.kind === "file" ? c.lines : c.totalLines,
+      }));
+      return squarify(items, inner);
+    },
+    [node.children, inner.x, inner.y, inner.w, inner.h, canRender],
+  );
+
+  // Per-tile gate fires *after* useMemo so the hook order stays stable
+  // for this instance across re-renders (squarify above no-ops via the
+  // canRender check, so no real work is wasted).
+  if (tooSmall) return null;
 
   return (
     <section style={style} className={sectionClass}>
@@ -160,21 +223,17 @@ function FileTile({
 
   return (
     // ref => TileRegistry; data-path is kept as a redundant escape hatch
-    // for DevTools inspection and as a fallback if the registry breaks.
+    // for DevTools inspection and is *also* the marker Visualizer's
+    // pointerup click resolver walks via closest('[data-path]') to decide
+    // whether a press resolved on a tile (pin/unpin) or empty space.
+    //
+    // No onClick here: pin/unpin lives in Visualizer's pointerup so a
+    // press-and-drag pans the canvas instead of pinning the tile under
+    // the press point.
     <article
       ref={registerTile}
       data-path={node.path}
       style={style}
-      onClick={(e) => {
-        // Toggle pin on the same tile; otherwise re-pin to this tile. No
-        // stopPropagation: the document-level click handler in PinController
-        // uses closest('[data-path]') to know we already handled it, and
-        // stopPropagation wouldn't stop window-level listeners anyway.
-        setPinned(isPinned ? null : node.path, {
-          x: e.clientX,
-          y: e.clientY,
-        });
-      }}
       onMouseEnter={(e) => setHover(node.path, { x: e.clientX, y: e.clientY })}
       onMouseMove={(e) => setHover(node.path, { x: e.clientX, y: e.clientY })}
       onMouseLeave={(e) => {
@@ -195,7 +254,7 @@ function FileTile({
         if (panelHoveredRef.current) return;
         setHover(null);
       }}
-      className={`relative overflow-hidden border border-zinc-300 bg-white/40 transition-[opacity,background-color,border-color] duration-150 ${stateClass}`}
+      className={`relative cursor-grab overflow-hidden border border-zinc-300 bg-white/40 transition-[opacity,background-color,border-color] duration-150 ${stateClass}`}
     >
       <header
         // Pin the header to exactly FILE_TILE_HEADER_HEIGHT so the line-clamp

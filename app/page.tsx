@@ -10,6 +10,7 @@ import { existsSync } from "node:fs";
 import { scanProject, countTree } from "@/lib/scan";
 import { Visualizer } from "@/components/Visualizer";
 import { RepoSwitcher } from "@/components/RepoSwitcher";
+import { DetailSlider } from "@/components/DetailSlider";
 import { fetchRepos } from "@/lib/daemon-client";
 import { resolveTargetRoot } from "@/lib/config";
 import type { RepoSummary } from "@/lib/types";
@@ -37,9 +38,12 @@ export default async function HomePage({
     <main className="flex h-screen flex-col">
       <header className="flex items-center justify-between gap-4 border-b border-zinc-200 px-6 py-3 text-[11px] uppercase tracking-wider text-zinc-500">
         <RepoSwitcher current={root} repos={repos} />
-        <span className="text-right">
-          {stats.dirs} directories · {stats.files} files · {stats.lines} lines
-        </span>
+        <div className="flex items-center gap-6">
+          <DetailSlider />
+          <span className="text-right">
+            {stats.dirs} directories · {stats.files} files · {stats.lines} lines
+          </span>
+        </div>
       </header>
       <div className="min-h-0 flex-1">
         <Visualizer tree={tree} root={root} />

@@ -8,6 +8,7 @@
  */
 "use client";
 
+import { useMemo } from "react";
 import { squarify } from "@/lib/treemap";
 import { TREEMAP } from "@/lib/constants";
 import { useHover } from "./HoverContext";
@@ -67,14 +68,27 @@ export function TreemapNode({ node, x, y, w, h, depth, tint }: Props) {
   const canRender =
     inner.w >= MIN_RENDER && inner.h >= MIN_RENDER && node.children.length > 0;
 
-  const childRects = canRender
-    ? squarify(
-        node.children.map((c) => ({
-          value: c.kind === "file" ? c.lines : c.totalLines,
-        })),
-        inner,
-      )
-    : [];
+  // Memoize squarify on the actually-changing inputs: the children array's
+  // *reference* (stable for a given tree, busts only when the scan re-runs)
+  // plus the four primitive rect scalars. Keying on node.children rather
+  // than the freshly-constructed items array dodges the "new array literal
+  // every render" footgun that would defeat the memo.
+  //
+  // The `items` array is built *inside* the memo body for the same reason —
+  // closing over the constructed array would key the memo on a fresh
+  // reference each render. canRender is part of the deps so the empty-array
+  // branch participates in the cache too (avoids re-running squarify on a
+  // shrunken rect once it falls below MIN_RENDER and back).
+  const childRects = useMemo(
+    () => {
+      if (!canRender) return [] as ReturnType<typeof squarify>;
+      const items = node.children.map((c) => ({
+        value: c.kind === "file" ? c.lines : c.totalLines,
+      }));
+      return squarify(items, inner);
+    },
+    [node.children, inner.x, inner.y, inner.w, inner.h, canRender],
+  );
 
   return (
     <section style={style} className={sectionClass}>

@@ -34,3 +34,7 @@ next-env.d.ts
 
 # Claude Code — keep user-local overrides out of the repo
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# Compound Engineering — local-only config
+.compound-engineering/*.local.yaml

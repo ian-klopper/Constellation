@@ -16,6 +16,7 @@ import {
 } from "./HoverContext";
 import { TileRegistryProvider } from "./TileRegistry";
 import { AgentOverlay } from "./AgentOverlay";
+import { PinController } from "./PinController";
 import type { CodebaseTree, FileNode, TreeNode } from "@/lib/types";
 
 export function Visualizer({ tree }: { tree: CodebaseTree }) {
@@ -124,17 +125,16 @@ export function Visualizer({ tree }: { tree: CodebaseTree }) {
               tint={null}
             />
           )}
-          <HoverPanel file={activeFile} mousePos={mousePos} />
+          <HoverPanel
+            file={activeFile}
+            mousePos={mousePos}
+            pinned={pinnedPath !== null}
+            pinnedPos={pinnedPos}
+            onClose={() => setPinned(null)}
+          />
         </div>
         <AgentOverlay />
-        {/* Temporary visible probe for Unit 4 — removed in Unit 5 once the
-            click-to-pin gesture lands. Lets us verify pin state without
-            React DevTools while wiring is live. */}
-        {pinnedPath && (
-          <div className="pointer-events-none fixed left-2 top-2 z-50 rounded bg-sky-500 px-2 py-1 text-[11px] text-white shadow">
-            PINNED: {pinnedPath}
-          </div>
-        )}
+        <PinController />
       </TileRegistryProvider>
     </HoverContext.Provider>
   );

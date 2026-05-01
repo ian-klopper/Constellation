@@ -35,11 +35,13 @@ export function HoverPanel({
   mousePos,
   pinned = false,
   pinnedPos = null,
+  onClose,
 }: {
   file: FileNode | null;
   mousePos: Pos | null;
   pinned?: boolean;
   pinnedPos?: Pos | null;
+  onClose?: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { panelHoveredRef } = useHover();
@@ -110,7 +112,17 @@ export function HoverPanel({
       style={{ left, top, width: PANEL_WIDTH, maxHeight: maxH, transform }}
       className="fixed z-40 overflow-y-auto rounded-sm border border-zinc-300 bg-white/95 p-3 text-[11px] text-zinc-800 shadow-lg backdrop-blur-sm"
     >
-      <div className="mb-1 text-[10px] uppercase tracking-[0.15em] text-zinc-500">
+      {pinned && onClose && (
+        <button
+          type="button"
+          aria-label="Close panel"
+          onClick={onClose}
+          className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded text-base leading-none text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+        >
+          ×
+        </button>
+      )}
+      <div className="mb-1 pr-6 text-[10px] uppercase tracking-[0.15em] text-zinc-500">
         {file.path}
       </div>
       <div className="mb-2 text-[12px] font-medium text-zinc-900">

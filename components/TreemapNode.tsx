@@ -122,6 +122,7 @@ function FileTile({
     inputs,
     outputs,
     setHover,
+    setPinned,
     panelHoveredRef,
   } = useHover();
   const registerTile = useRegisterTile(node.path);
@@ -159,6 +160,17 @@ function FileTile({
       ref={registerTile}
       data-path={node.path}
       style={style}
+      onClick={(e) => {
+        // Toggle pin on the same tile; otherwise re-pin to this tile. No
+        // stopPropagation: the document-level click handler in PinController
+        // uses closest('[data-path]') to know we already handled it, and
+        // stopPropagation wouldn't stop window-level listeners anyway.
+        const isCurrentlyPinned = pinnedPath === node.path;
+        setPinned(isCurrentlyPinned ? null : node.path, {
+          x: e.clientX,
+          y: e.clientY,
+        });
+      }}
       onMouseEnter={(e) => setHover(node.path, { x: e.clientX, y: e.clientY })}
       onMouseMove={(e) => setHover(node.path, { x: e.clientX, y: e.clientY })}
       onMouseLeave={(e) => {

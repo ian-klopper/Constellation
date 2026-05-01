@@ -77,6 +77,36 @@ export const OVERLAY_MOTION = {
   BUBBLE_OPACITY_MS: 200,
 } as const;
 
+// Zoom + LOD constants for the cursor-anchored scroll-zoom + drag-pan
+// gesture surface owned by Visualizer. ZOOM_MIN is always 1 in the layout
+// space (canvas exactly fills the viewport at zoom=1), so the floor doesn't
+// need re-derivation on resize — only pan does. ZOOM_MAX is a soft cap; the
+// real ceiling is "small enough that pixel-density doesn't go silly."
+export const ZOOM = {
+  MIN: 1,
+  MAX: 8,
+  // Wheel-event delta multiplier for the magnitude-aware zoom factor:
+  // factor = exp(-deltaY * SENSITIVITY), then clamped to [0.5, 2] per event.
+  // 0.005 makes mouse-wheel detents (deltaY ~100) feel like ~1.65× per
+  // click and trackpad ticks (deltaY ~5) feel like ~1.025× — both feel
+  // right without a modifier semantic.
+  SENSITIVITY: 0.005,
+  // Pan clamp: at zooms above 1, allow pan such that at least this fraction
+  // of the canvas's smaller dimension stays in view per axis. 0.3 is a
+  // starting point; soften (0.5) or tighten (0.1) by feel.
+  PAN_CLAMP_MARGIN: 0.3,
+  // committedZoom (the React state TreemapNode's LOD gate reads) updates
+  // only when the live zoom diverges from it by ≥ this fraction. Keeps
+  // TreemapNode reconciliation rare during continuous gestures — a wheel
+  // sweep from 1 to 8 produces ~40 commits, not ~600 wheel events.
+  LOD_COMMIT_QUANTUM: 0.05,
+} as const;
+
+// Shared between PinController's empty-space-click guard and Visualizer's
+// click-vs-drag classifier. Lives here so both consumers agree on the
+// threshold without one of them silently drifting.
+export const POINTER_MOVE_THRESHOLD = 4;
+
 // Scan-time gates. The principle: a 14 GB build cache should still appear
 // on the map (so the user can see it exists) but must not be loaded into
 // memory. Anything above these caps becomes a placeholder tile instead.

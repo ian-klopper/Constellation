@@ -18,13 +18,15 @@ In any git working tree (the codebase you want to visualize), run:
 bash <(curl -fsSL https://raw.githubusercontent.com/ian-klopper/Constellation/main/install.sh)
 ```
 
-The `bash <(…)` form (rather than `curl … | bash`) is deliberate — it leaves the script's stdin attached to your terminal so the prompts work cleanly even in IDE terminals that don't expose `/dev/tty`.
+Run it in your shell — not inside Claude Code's `!` mode, where the script can't read your replies. (The script detects this and bails out with a hint.) The `bash <(…)` form (instead of `curl … | bash`) keeps the script's stdin attached to your terminal so prompts work in IDE terminals that don't expose `/dev/tty`.
 
 The script preflights Node 20+, `jq`, and git, asks where to clone Constellation as a sibling, installs its dependencies, and copies hook shims and skills into your repo's `.claude/`. **It does not touch your `.claude/settings.json`.**
 
-For that last step the script prints a short prompt to paste into [Claude Code](https://docs.claude.com/en/docs/claude-code), running in the same directory. Claude shows you the diff to `settings.json` and the full contents of every hook script before writing anything, then starts the visualizer at <http://localhost:47318>.
+For that last step, if [Claude Code](https://docs.claude.com/en/docs/claude-code)'s `claude` CLI is on your PATH, the script offers to launch it in plan mode with the merge prompt already loaded — Claude shows you the JSON diff to `settings.json` and the full contents of every hook script before writing anything, then starts the visualizer at <http://localhost:47318>. (If `claude` isn't on PATH, the script prints the prompt for you to paste manually.)
 
 To update Constellation later, just run the same line again — the script detects the existing clone and offers to fetch the latest `main`.
+
+For non-interactive use (CI, scripted setups), set `CONSTELLATION_INSTALL_DIR=<absolute-path>` to skip the install-dir prompt.
 
 ### What gets installed
 

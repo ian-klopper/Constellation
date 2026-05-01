@@ -174,21 +174,17 @@ function FileTile({
 
   return (
     // ref => TileRegistry; data-path is kept as a redundant escape hatch
-    // for DevTools inspection and as a fallback if the registry breaks.
+    // for DevTools inspection and is *also* the marker Visualizer's
+    // pointerup click resolver walks via closest('[data-path]') to decide
+    // whether a press resolved on a tile (pin/unpin) or empty space.
+    //
+    // No onClick here: pin/unpin lives in Visualizer's pointerup so a
+    // press-and-drag pans the canvas instead of pinning the tile under
+    // the press point.
     <article
       ref={registerTile}
       data-path={node.path}
       style={style}
-      onClick={(e) => {
-        // Toggle pin on the same tile; otherwise re-pin to this tile. No
-        // stopPropagation: the document-level click handler in PinController
-        // uses closest('[data-path]') to know we already handled it, and
-        // stopPropagation wouldn't stop window-level listeners anyway.
-        setPinned(isPinned ? null : node.path, {
-          x: e.clientX,
-          y: e.clientY,
-        });
-      }}
       onMouseEnter={(e) => setHover(node.path, { x: e.clientX, y: e.clientY })}
       onMouseMove={(e) => setHover(node.path, { x: e.clientX, y: e.clientY })}
       onMouseLeave={(e) => {
@@ -209,7 +205,7 @@ function FileTile({
         if (panelHoveredRef.current) return;
         setHover(null);
       }}
-      className={`relative overflow-hidden border border-zinc-300 bg-white/40 transition-[opacity,background-color,border-color] duration-150 ${stateClass}`}
+      className={`relative cursor-grab overflow-hidden border border-zinc-300 bg-white/40 transition-[opacity,background-color,border-color] duration-150 ${stateClass}`}
     >
       <header
         // Pin the header to exactly FILE_TILE_HEADER_HEIGHT so the line-clamp

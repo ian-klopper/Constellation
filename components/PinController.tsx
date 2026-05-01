@@ -16,10 +16,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { POINTER_MOVE_THRESHOLD } from "@/lib/constants";
 import { useHover } from "./HoverContext";
 import { useTileRegistry } from "./TileRegistry";
-
-const POINTER_MOVE_THRESHOLD = 4;
 
 export function PinController() {
   const { pinnedPath, setPinned } = useHover();

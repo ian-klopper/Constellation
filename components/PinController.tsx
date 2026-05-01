@@ -50,15 +50,21 @@ export function PinController() {
       downPos = { x: e.clientX, y: e.clientY };
     };
     const onClick = (e: MouseEvent) => {
+      // Consume downPos: a stale value from an earlier pointerdown must
+      // not falsely reject a later click as a drag.
+      const last = downPos;
+      downPos = null;
       if (pinnedPathRef.current === null) return;
       if (
-        downPos &&
-        Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) >
+        last &&
+        Math.hypot(e.clientX - last.x, e.clientY - last.y) >
           POINTER_MOVE_THRESHOLD
       ) {
         return;
       }
-      const target = e.target as Element | null;
+      // e.target is EventTarget | null — a Document/Window/Text node would
+      // pass an `as Element` cast but doesn't have .closest().
+      const target = e.target instanceof Element ? e.target : null;
       if (!target) return;
       // Tiles (their own onClick already toggled pin), the panel itself,
       // and anything inside the agent overlay are all "not empty space".

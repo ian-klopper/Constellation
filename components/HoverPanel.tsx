@@ -13,7 +13,7 @@
 
 import { useEffect, useRef } from "react";
 import { SymbolRow } from "./SymbolRow";
-import { useHover } from "./HoverContext";
+import { useHover, type Pos } from "./HoverContext";
 import { HOVER_PANEL } from "@/lib/constants";
 import type { FileNode } from "@/lib/types";
 
@@ -27,8 +27,6 @@ const {
   VIEWPORT_PADDING,
   MIN_BELOW_BEFORE_FLIP,
 } = HOVER_PANEL;
-
-type Pos = { x: number; y: number };
 
 export function HoverPanel({
   file,
@@ -53,6 +51,17 @@ export function HoverPanel({
   useEffect(() => {
     scrollRef.current?.scrollTo(0, 0);
   }, [file?.path]);
+
+  // Reset panelHoveredRef on unmount: if the panel disappears while the
+  // cursor is over it (Esc, close button, file deletion), onMouseLeave
+  // never fires and the ref would stay stuck `true`, suppressing every
+  // future tile mouseleave indefinitely.
+  useEffect(
+    () => () => {
+      panelHoveredRef.current = false;
+    },
+    [panelHoveredRef],
+  );
 
   const pos = pinned ? pinnedPos : mousePos;
   if (!file || !pos) return null;

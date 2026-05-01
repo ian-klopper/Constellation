@@ -174,14 +174,19 @@ function FileTile({
       onMouseEnter={(e) => setHover(node.path, { x: e.clientX, y: e.clientY })}
       onMouseMove={(e) => setHover(node.path, { x: e.clientX, y: e.clientY })}
       onMouseLeave={(e) => {
+        // While pinned, hover does not change selection — pin owns the
+        // highlight. Skip the cross-element survival dance entirely.
+        if (pinnedPath !== null) {
+          setHover(null);
+          return;
+        }
         // Cross-element hover survival: if the cursor is heading onto the
-        // floating panel, keep the hover. relatedTarget is null on rapid
-        // mouseouts in some browsers, so panelHoveredRef.current is the
-        // fallback — if the panel's onMouseEnter has already fired, we
-        // know the cursor is inside it.
-        const goingToPanel = (e.relatedTarget as Element | null)?.closest(
-          "[data-hover-panel]",
-        );
+        // floating panel, keep the hover. relatedTarget can be null on
+        // rapid mouseouts (panelHoveredRef is the fallback) and can also
+        // be a Document/Window in some browsers — neither has .closest().
+        const rt = e.relatedTarget;
+        const goingToPanel =
+          rt instanceof Element && rt.closest("[data-hover-panel]");
         if (goingToPanel) return;
         if (panelHoveredRef.current) return;
         setHover(null);

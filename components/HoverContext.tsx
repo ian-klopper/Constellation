@@ -12,7 +12,7 @@
  */
 "use client";
 
-import { createContext, useContext, type MutableRefObject } from "react";
+import { createContext, useContext, type RefObject } from "react";
 
 export type Pos = { x: number; y: number };
 
@@ -24,7 +24,7 @@ export type HoverContextValue = {
   outputs: Set<string>;
   setHover: (path: string | null, pos?: Pos) => void;
   setPinned: (path: string | null, pos?: Pos) => void;
-  panelHoveredRef: MutableRefObject<boolean>;
+  panelHoveredRef: RefObject<boolean>;
 };
 
 export const HoverContext = createContext<HoverContextValue | null>(null);

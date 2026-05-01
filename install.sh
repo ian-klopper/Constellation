@@ -273,10 +273,17 @@ Walk the repo (cwd is the user's project). Skip these paths entirely — they're
 
 Of what remains, only files with these extensions can hold a description Constellation will read:
 - `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.css`, `.scss` — JSDoc block: `/** … */`
-- `.sh` — `#` comment block (after the shebang line if there is one)
+- `.sh`, `.yaml`, `.yml`, `.rb` — `#` comment block (after the shebang line if there is one)
+- `.py` — module docstring `"""…"""` (preferred), or a `#` block if the file isn't a module
+- `.sql` — `--` line block, or a `/* … */` block at the top
+- `.html`, `.htm` — `<!-- … -->` comment, immediately after any doctype
 - `.md` — the first paragraph after any heading
 
-Skip files that already have a description in the matching format — never overwrite an existing comment. If a file has an existing comment in a non-matching format (e.g. a `//` line at the top of a `.ts` file), also skip and report it; leave it alone.
+For `.ts`/`.tsx`/`.js` files that already start with a framework directive — `'use client';`, `'use server';`, `// @vitest-environment node`, `// @ts-nocheck`, etc. — the description goes **immediately after** the directive, not before. The directive must stay as the first executable statement so the framework / test runner still picks it up. Constellation skips past these directives when looking for the description.
+
+For files that genuinely can't carry a leading comment (`.json` — package.json, tsconfig.json, manifests — and binaries), Constellation also reads an optional sidecar at `.constellation/descriptions.yaml` (or `.json`/`.yml`). It's a flat path → description map: `package.json: "Project manifest — npm scripts and dependencies."`. Sidecar entries override anything found in the file itself, so they're useful for forcing a description on tiles whose source file doesn't have a natural place for one. Don't write the sidecar yourself unless the user asks — most descriptions belong in the file.
+
+Skip files that already have a description in the matching format — never overwrite an existing comment. If a file has an existing comment in a non-matching format (e.g. a `//` line at the top of a `.ts` file that isn't one of the recognized directives), also skip and report it; leave it alone.
 
 Tell the user roughly how many files would get a description and which directories they're concentrated in. If the repo is large enough that scanning every file would be obviously expensive, say so.
 
@@ -299,9 +306,13 @@ For each candidate file in the agreed scope:
    - Good: "Cursor-anchored floating panel that shows the active tile's description, exports, and import lists. Pin-mode keeps it visible after the cursor leaves; hover-mode follows the pointer."
 3. If after reading the file you genuinely can't tell what it's for, skip it. A wrong description is worse than no description for a vibecoder reading the map.
 4. Prepend the description in the right syntax for the file's language:
-   - `.ts/.tsx/.js/.jsx/.mjs/.cjs/.css/.scss`: a `/** ... */` block then existing contents.
-   - `.sh` with shebang: keep the shebang, insert a `# <description>` line plus a blank line after it.
-   - `.sh` without shebang: a `# <description>` line plus a blank line, then existing contents.
+   - `.ts/.tsx/.js/.jsx/.mjs/.cjs/.css/.scss` with a leading directive (`'use client';`, `// @vitest-environment node`, shebang, etc.): keep the directive on its current line, insert a blank line, then a `/** ... */` block, then a blank line, then existing contents.
+   - `.ts/.tsx/.js/.jsx/.mjs/.cjs/.css/.scss` without a leading directive: a `/** ... */` block then existing contents.
+   - `.sh`/`.yaml`/`.yml`/`.rb` with shebang: keep the shebang, insert a `# <description>` line plus a blank line after it.
+   - `.sh`/`.yaml`/`.yml`/`.rb` without shebang: a `# <description>` line plus a blank line, then existing contents.
+   - `.py` (module): a `"""<description>"""` line, then a blank line, then existing contents (after any shebang and `# coding:` line).
+   - `.sql`: a `-- <description>` line, then existing contents.
+   - `.html`/`.htm`: keep any `<?xml ?>` and `<!DOCTYPE>`, then `<!-- <description> -->`, then existing contents.
    - `.md` with a heading: description as a paragraph immediately after the first heading.
    - `.md` without a heading: description as the first paragraph.
 5. Preserve the file's trailing-newline discipline. Don't add trailing whitespace.

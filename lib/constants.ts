@@ -10,8 +10,13 @@ export const TREEMAP = {
   INNER_PAD: 3,
   // Minimum inner width/height before a directory bothers laying out children.
   MIN_RENDER: 8,
-  // Below this tile height we hide the description and just show the filename.
-  DESC_MIN_HEIGHT: 32,
+  // Pinned line-height for tile descriptions. Must match the leading-[N]
+  // utility on the description <p> so floor(availH / DESCRIPTION_LINE_HEIGHT)
+  // reflects actually-rendered lines and never clips mid-line.
+  DESCRIPTION_LINE_HEIGHT: 14,
+  // FileTile header (filename row): text-[11px] + py-1 + border-b. Conservative
+  // value so the line-clamp math under-promises rather than over-promises.
+  FILE_TILE_HEADER_HEIGHT: 24,
   // Top-level directory background tints. Subdirectories inherit their parent's.
   TINTS: {
     app: "bg-[#eef2f7]",

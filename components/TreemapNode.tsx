@@ -14,7 +14,16 @@ import { useHover } from "./HoverContext";
 import { useRegisterTile } from "./TileRegistry";
 import type { TreeNode } from "@/lib/types";
 
-const { LABEL_HEIGHT, INNER_PAD, MIN_RENDER, DESC_MIN_HEIGHT, TINTS } = TREEMAP;
+const {
+  LABEL_HEIGHT,
+  INNER_PAD,
+  MIN_RENDER,
+  TINTS,
+  DESCRIPTION_LINE_HEIGHT,
+  FILE_TILE_HEADER_HEIGHT,
+} = TREEMAP;
+// Vertical padding on the description <p> (matches Tailwind py-1.5).
+const DESCRIPTION_PADDING_Y = 6;
 
 type Props = {
   node: TreeNode;
@@ -126,7 +135,9 @@ function FileTile({
           ? "tile-dim"
           : "";
 
-  const showDescription = h >= DESC_MIN_HEIGHT && node.description;
+  const availableH = h - FILE_TILE_HEADER_HEIGHT - 2 * DESCRIPTION_PADDING_Y;
+  const lines = Math.floor(availableH / DESCRIPTION_LINE_HEIGHT);
+  const showDescription = lines >= 1 && Boolean(node.description);
 
   return (
     // ref => TileRegistry; data-path is kept as a redundant escape hatch
@@ -144,7 +155,15 @@ function FileTile({
         {node.name}
       </header>
       {showDescription && (
-        <p className="px-2 py-1.5 text-[11px] leading-snug text-zinc-700">
+        <p
+          className="px-2 py-1.5 text-[11px] leading-[14px] text-zinc-700"
+          style={{
+            display: "-webkit-box",
+            WebkitBoxOrient: "vertical",
+            WebkitLineClamp: lines,
+            overflow: "hidden",
+          }}
+        >
           {node.description}
         </p>
       )}

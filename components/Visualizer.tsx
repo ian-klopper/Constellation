@@ -9,7 +9,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TreemapNode } from "./TreemapNode";
 import { HoverPanel } from "./HoverPanel";
-import { HoverContext, type HoverContextValue } from "./HoverContext";
+import {
+  HoverContext,
+  type HoverContextValue,
+  type Pos,
+} from "./HoverContext";
 import { TileRegistryProvider } from "./TileRegistry";
 import { AgentOverlay } from "./AgentOverlay";
 import type { CodebaseTree, FileNode, TreeNode } from "@/lib/types";
@@ -18,21 +22,23 @@ export function Visualizer({ tree }: { tree: CodebaseTree }) {
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
-  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(
-    null,
-  );
+  const [mousePos, setMousePos] = useState<Pos | null>(null);
+  const [pinnedPath, setPinnedPath] = useState<string | null>(null);
+  const [pinnedPos, setPinnedPos] = useState<Pos | null>(null);
   // True while the cursor is over the floating HoverPanel. Tiles read this
   // in their onMouseLeave to keep the panel up when hover crosses tile→panel.
   // Ref instead of state: toggling .current must not re-render every tile.
   const panelHoveredRef = useRef(false);
 
-  const setHover = useCallback(
-    (path: string | null, pos?: { x: number; y: number }) => {
-      setHoveredPath(path);
-      if (pos) setMousePos(pos);
-    },
-    [],
-  );
+  const setHover = useCallback((path: string | null, pos?: Pos) => {
+    setHoveredPath(path);
+    if (pos) setMousePos(pos);
+  }, []);
+
+  const setPinned = useCallback((path: string | null, pos?: Pos) => {
+    setPinnedPath(path);
+    setPinnedPos(path && pos ? pos : null);
+  }, []);
 
   useEffect(() => {
     const el = ref.current;
@@ -53,25 +59,54 @@ export function Visualizer({ tree }: { tree: CodebaseTree }) {
     return map;
   }, [tree]);
 
-  const { inputs, outputs, hoveredFile } = useMemo(() => {
-    if (!hoveredPath) {
+  // Pin wins over hover so the import-graph highlight freezes on the
+  // pinned file even as the cursor wanders.
+  const activePath = pinnedPath ?? hoveredPath;
+
+  const { inputs, outputs, activeFile } = useMemo(() => {
+    if (!activePath) {
       return {
         inputs: EMPTY_SET,
         outputs: EMPTY_SET,
-        hoveredFile: null as FileNode | null,
+        activeFile: null as FileNode | null,
       };
     }
-    const f = filesByPath.get(hoveredPath) ?? null;
+    const f = filesByPath.get(activePath) ?? null;
     return {
       inputs: new Set(f?.imports ?? []),
       outputs: new Set(f?.importedBy ?? []),
-      hoveredFile: f,
+      activeFile: f,
     };
-  }, [hoveredPath, filesByPath]);
+  }, [activePath, filesByPath]);
+
+  // Auto-clear: if the pinned file disappears (HMR re-scan, file deletion),
+  // drop the pin so we don't leave a dangling reference.
+  useEffect(() => {
+    if (pinnedPath && !filesByPath.has(pinnedPath)) {
+      setPinned(null);
+    }
+  }, [pinnedPath, filesByPath, setPinned]);
 
   const hoverValue = useMemo<HoverContextValue>(
-    () => ({ hoveredPath, inputs, outputs, setHover, panelHoveredRef }),
-    [hoveredPath, inputs, outputs, setHover],
+    () => ({
+      hoveredPath,
+      pinnedPath,
+      pinnedPos,
+      inputs,
+      outputs,
+      setHover,
+      setPinned,
+      panelHoveredRef,
+    }),
+    [
+      hoveredPath,
+      pinnedPath,
+      pinnedPos,
+      inputs,
+      outputs,
+      setHover,
+      setPinned,
+    ],
   );
 
   return (
@@ -89,9 +124,17 @@ export function Visualizer({ tree }: { tree: CodebaseTree }) {
               tint={null}
             />
           )}
-          <HoverPanel file={hoveredFile} mousePos={mousePos} />
+          <HoverPanel file={activeFile} mousePos={mousePos} />
         </div>
         <AgentOverlay />
+        {/* Temporary visible probe for Unit 4 — removed in Unit 5 once the
+            click-to-pin gesture lands. Lets us verify pin state without
+            React DevTools while wiring is live. */}
+        {pinnedPath && (
+          <div className="pointer-events-none fixed left-2 top-2 z-50 rounded bg-sky-500 px-2 py-1 text-[11px] text-white shadow">
+            PINNED: {pinnedPath}
+          </div>
+        )}
       </TileRegistryProvider>
     </HoverContext.Provider>
   );

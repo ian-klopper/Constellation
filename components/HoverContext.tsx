@@ -14,11 +14,16 @@
 
 import { createContext, useContext, type MutableRefObject } from "react";
 
+export type Pos = { x: number; y: number };
+
 export type HoverContextValue = {
   hoveredPath: string | null;
+  pinnedPath: string | null;
+  pinnedPos: Pos | null;
   inputs: Set<string>;
   outputs: Set<string>;
-  setHover: (path: string | null, pos?: { x: number; y: number }) => void;
+  setHover: (path: string | null, pos?: Pos) => void;
+  setPinned: (path: string | null, pos?: Pos) => void;
   panelHoveredRef: MutableRefObject<boolean>;
 };
 

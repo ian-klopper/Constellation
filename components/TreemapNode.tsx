@@ -116,25 +116,37 @@ function FileTile({
   style: React.CSSProperties;
   h: number;
 }) {
-  const { hoveredPath, inputs, outputs, setHover, panelHoveredRef } =
-    useHover();
+  const {
+    hoveredPath,
+    pinnedPath,
+    inputs,
+    outputs,
+    setHover,
+    panelHoveredRef,
+  } = useHover();
   const registerTile = useRegisterTile(node.path);
 
-  const isHovered = hoveredPath === node.path;
+  // While a tile is pinned, hover does not change selection — pin freezes
+  // the highlight on its target.
+  const isPinned = pinnedPath === node.path;
+  const isHovered = pinnedPath === null && hoveredPath === node.path;
   const isInput = inputs.has(node.path);
   const isOutput = outputs.has(node.path);
+  const activePath = pinnedPath ?? hoveredPath;
   const isUnrelated =
-    hoveredPath !== null && !isHovered && !isInput && !isOutput;
+    activePath !== null && !isPinned && !isHovered && !isInput && !isOutput;
 
-  const stateClass = isHovered
-    ? "tile-hovered"
-    : isInput
-      ? "tile-input"
-      : isOutput
-        ? "tile-output"
-        : isUnrelated
-          ? "tile-dim"
-          : "";
+  const stateClass = isPinned
+    ? "tile-pinned"
+    : isHovered
+      ? "tile-hovered"
+      : isInput
+        ? "tile-input"
+        : isOutput
+          ? "tile-output"
+          : isUnrelated
+            ? "tile-dim"
+            : "";
 
   const availableH = h - FILE_TILE_HEADER_HEIGHT - 2 * DESCRIPTION_PADDING_Y;
   const lines = Math.floor(availableH / DESCRIPTION_LINE_HEIGHT);

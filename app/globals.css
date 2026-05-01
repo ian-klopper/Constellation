@@ -17,10 +17,21 @@ body {
 }
 
 /* File-tile hover states (set by components/TreemapNode.tsx).
+   Pinned tile gets a sky outline drawn 2px inside the tile bounds.
    Hovered tile gets a strong zinc border + brighter background.
-   Inputs (files the hovered file imports) glow blue.
-   Outputs (files that import the hovered file) glow amber.
-   Unrelated tiles fade so the related set stands out. */
+   Inputs (files the hovered/pinned file imports) glow blue.
+   Outputs (files that import the hovered/pinned file) glow amber.
+   Unrelated tiles fade so the related set stands out.
+
+   The pinned ring uses outline (not box-shadow) with outline-offset:-2px
+   so it paints inside the tile boundary regardless of clipping or
+   sibling stacking. */
+.tile-pinned {
+  outline: 2px solid rgb(14 165 233); /* sky-500 */
+  outline-offset: -2px;
+  background-color: rgb(255 255 255);
+  z-index: 10;
+}
 .tile-hovered {
   border-color: rgb(63 63 70);   /* zinc-700 */
   background-color: rgb(255 255 255);

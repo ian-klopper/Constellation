@@ -12,12 +12,40 @@ The agent overlay is the part I'm genuinely curious about. As more of the work i
 
 ## Quick start
 
+In any git working tree (the codebase you want to visualize), run:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/ian-klopper/Constellation/main/install.sh)
+```
+
+Run it in your shell — not inside Claude Code's `!` mode, where the script can't read your replies. (The script detects this and bails out with a hint.) The `bash <(…)` form (instead of `curl … | bash`) keeps the script's stdin attached to your terminal so prompts work in IDE terminals that don't expose `/dev/tty`.
+
+The script preflights Node 20+, `jq`, and git, asks where to clone Constellation as a sibling, installs its dependencies, and copies hook shims and skills into your repo's `.claude/`.
+
+For the final settings-merge step, the script prints a unified JSON diff against your `.claude/settings.json` (creating the file if missing) plus the full contents of every hook script that will run on your tool calls. After your `y` confirmation, it merges the file in place and starts the visualizer at <http://localhost:47318>. As a last step, if `claude` is on your PATH, the installer offers to launch Claude Code in plan mode with a self-contained prompt that walks you through populating each file's description so tiles and hover cards aren't blank — you can press `n` to skip and run the installer again later. The [live-agent overlay](#how-the-live-agent-overlay-works) lights up on its own next time you run Claude Code in the repo regardless.
+
+To update Constellation later, just run the same line again — the script detects the existing clone and offers to fetch the latest `main`.
+
+For non-interactive use (CI, scripted setups), set `CONSTELLATION_INSTALL_DIR=<absolute-path>` to skip the install-dir prompt.
+
+### What gets installed
+
+- **Sibling clone** at the path you choose: Constellation's own source + `node_modules`, outside your repo.
+- **`.claude/hooks/constellation/`** in your repo — six 3–5-line `curl` shims with a 500ms timeout and `|| true`, so a downed daemon never breaks your Claude Code session.
+- **`.claude/settings.json`** matchers (only after your approval) — appended, never edited in place.
+- **`.claude/skills/constellation/feedback/`** — inert until invoked. Run `/constellation:feedback` to file an issue here. (The end-of-install step offers to launch Claude Code in plan mode to populate per-file descriptions, so there's no separate skill for that — re-run the installer to redo it.)
+- **`.constellation/`** appended to your `.gitignore` (lifecycle state lives there at runtime).
+
+## Hacking on Constellation itself
+
+If you want to work on the visualizer (not just point it at another repo), clone this repo directly and run:
+
 ```bash
 npm install
 npm run dev
 ```
 
-Then open <http://localhost:3000>.
+Then open <http://localhost:47318>. The visualizer dogfoods itself — `process.cwd()` is both the install root and the target.
 
 `npm run dev` is a small supervisor (`scripts/dev.mjs`) that spawns two processes:
 
@@ -63,4 +91,4 @@ This is a personal project — early, opinionated, and rough around the edges. T
 
 ## License
 
-No license yet — this is a personal repo. If you want to use any of it, open an issue and we'll figure something out.
+[MIT](./LICENSE) — do whatever, just keep the copyright notice and don't blame me if it breaks.

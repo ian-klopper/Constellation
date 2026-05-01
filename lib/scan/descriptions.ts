@@ -11,6 +11,11 @@
  * gave it; the hover panel scrolls long descriptions. A scan-time clamp
  * would force both surfaces to share the same truncation, which broke R4
  * (panel must show the full description).
+ *
+ * The description-writer prompt at the end of `install.sh` mirrors these
+ * has-header rules so the launched Claude session can decide which files
+ * to skip without importing this module. If you change the JSDoc / shell
+ * / markdown detection here, also update the prompt in `install.sh`.
  */
 import "server-only";
 import path from "node:path";

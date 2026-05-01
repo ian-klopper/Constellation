@@ -6,6 +6,8 @@ import { scanProject, countTree } from "@/lib/scan";
 import { Visualizer } from "@/components/Visualizer";
 
 export default async function HomePage() {
+  // No arg → scanProject picks the target via resolveTargetRoot()
+  // (CONSTELLATION_TARGET_ROOT env, falling back to cwd for single-repo dev).
   const tree = await scanProject();
   const stats = countTree(tree.tree);
   return (

@@ -76,3 +76,19 @@ export const OVERLAY_MOTION = {
   OPACITY_MS: 350,
   BUBBLE_OPACITY_MS: 200,
 } as const;
+
+// Scan-time gates. The principle: a 14 GB build cache should still appear
+// on the map (so the user can see it exists) but must not be loaded into
+// memory. Anything above these caps becomes a placeholder tile instead.
+//
+// MAX_FILE_BYTES catches single huge files (minified bundles, JSON dumps,
+// generated TS). MAX_DIR_BYTES / MAX_DIR_FILES catch directories whose
+// children are individually small but collectively explosive
+// (.trigger/.turbo/.cache/etc. across ecosystems). OVERSIZE_DISPLAY_LINES
+// caps the synthetic line count we hand placeholders so they don't dominate.
+export const SCAN_LIMITS = {
+  MAX_FILE_BYTES: 1024 * 1024,
+  MAX_DIR_BYTES: 100 * 1024 * 1024,
+  MAX_DIR_FILES: 5000,
+  OVERSIZE_DISPLAY_LINES: 1000,
+} as const;

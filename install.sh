@@ -104,7 +104,13 @@ if [ -e "$INSTALL_DIR" ]; then
     ask "Update it (git fetch + checkout origin/$REF)? [y/N]: " n
     case "$REPLY" in
       y|Y|yes)
-        git -C "$INSTALL_DIR" fetch --depth 1 origin "$REF" \
+        # Explicit refspec so the remote-tracking branch ref actually
+        # gets created/updated. A plain `fetch --depth 1 origin <ref>`
+        # only updates FETCH_HEAD on a shallow clone whose configured
+        # fetch refspec is just main, so the next `checkout origin/<ref>`
+        # would fail.
+        git -C "$INSTALL_DIR" fetch --depth 1 origin \
+          "+refs/heads/$REF:refs/remotes/origin/$REF" \
           && git -C "$INSTALL_DIR" checkout "origin/$REF"
         ;;
       *) say "Skipping update — make sure $INSTALL_DIR is already on $REF." ;;
@@ -119,10 +125,12 @@ else
     git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
   else
     # Non-main ref: clone shallow on main, then fetch and check out the
-    # requested ref. Avoids needing to know whether the ref is a branch,
-    # tag, or SHA at clone time.
+    # requested ref. The explicit refspec creates the remote-tracking
+    # branch so `checkout origin/<ref>` resolves (a plain
+    # `fetch --depth 1 origin <ref>` only sets FETCH_HEAD).
     git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
-    git -C "$INSTALL_DIR" fetch --depth 1 origin "$REF"
+    git -C "$INSTALL_DIR" fetch --depth 1 origin \
+      "+refs/heads/$REF:refs/remotes/origin/$REF"
     git -C "$INSTALL_DIR" checkout "origin/$REF"
   fi
 fi

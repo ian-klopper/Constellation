@@ -123,6 +123,8 @@ None used. Codebase patterns and the Claude Code hooks/skills conventions are su
 
 - **Feedback skill auth-failure UX.** If `gh` is unauthenticated, skill prints a one-line `gh auth login` hint plus the draft body. If `gh` is missing entirely, skill prints the install hint plus the draft. Both paths exit non-zero so the user knows submission didn't happen.
 
+- **Settings merge runs in a Node script, not via AI handoff.** The Settings.json merge algorithm above is implemented in `scripts/install-settings.mjs`, called directly from `install.sh`. Earlier iterations handed off to Claude Code in plan mode; that path was removed because the algorithm is fully deterministic, the audit (diff + hook contents) is well-served by terminal output, and the AI step was the source of repeated install-flow churn. The `claude` CLI is no longer required to complete the install — the live-agent overlay still works, of course; it just lights up the next time the user runs Claude Code in their target repo.
+
 - **No test runner yet.** This codebase has no test runner installed. Test scenarios in this plan are written as specifications an implementer will codify when a runner lands. Until then, **verification is end-to-end smoke testing against a real foreign repo** (per the institutional learning's "premise-level bug" warning).
 
 ## Open Questions

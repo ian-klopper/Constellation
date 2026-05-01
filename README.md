@@ -20,9 +20,9 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ian-klopper/Constellation/ma
 
 Run it in your shell — not inside Claude Code's `!` mode, where the script can't read your replies. (The script detects this and bails out with a hint.) The `bash <(…)` form (instead of `curl … | bash`) keeps the script's stdin attached to your terminal so prompts work in IDE terminals that don't expose `/dev/tty`.
 
-The script preflights Node 20+, `jq`, and git, asks where to clone Constellation as a sibling, installs its dependencies, and copies hook shims and skills into your repo's `.claude/`. **It does not touch your `.claude/settings.json`.**
+The script preflights Node 20+, `jq`, and git, asks where to clone Constellation as a sibling, installs its dependencies, and copies hook shims and skills into your repo's `.claude/`.
 
-For that last step, if [Claude Code](https://docs.claude.com/en/docs/claude-code)'s `claude` CLI is on your PATH, the script offers to launch it in plan mode with the merge prompt already loaded — Claude shows you the JSON diff to `settings.json` and the full contents of every hook script before writing anything, then starts the visualizer at <http://localhost:47318>. (If `claude` isn't on PATH, the script prints the prompt for you to paste manually.)
+For the final settings-merge step, the script prints a unified JSON diff against your `.claude/settings.json` (creating the file if missing) plus the full contents of every hook script that will run on your tool calls. After your `y` confirmation, it merges the file in place and starts the visualizer at <http://localhost:47318>. No Claude Code session required to finish the install — the [live-agent overlay](#how-the-live-agent-overlay-works) lights up on its own next time you run Claude Code in the repo.
 
 To update Constellation later, just run the same line again — the script detects the existing clone and offers to fetch the latest `main`.
 

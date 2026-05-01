@@ -7,9 +7,9 @@
 # fail in any environment whose bash subshell lacks a controlling
 # terminal (some IDE terminals, CI runners, sandboxes).
 # Clones Constellation to a sibling directory, installs deps, copies
-# hooks + skills into TARGET, then either launches Claude Code in plan
-# mode with the settings.json-merge prompt loaded, or prints it for
-# manual paste. Refuses to run non-interactively unless
+# hooks + skills into TARGET, runs the deterministic settings.json
+# merge (scripts/install-settings.mjs), and starts the visualizer in
+# the background. Refuses to run non-interactively unless
 # CONSTELLATION_INSTALL_DIR is set.
 
 set -euo pipefail
@@ -150,55 +150,55 @@ if ! grep -qxF '.constellation/' "$TARGET/.gitignore" 2>/dev/null; then
   say "Appended .constellation/ to .gitignore."
 fi
 
-# 8. Handoff to Claude Code in plan mode -------------------------------------
+# 8. Merge settings.json (deterministic, no AI) -----------------------------
 
-HANDOFF_PROMPT_TEMPLATE=""
-IFS='' read -r -d '' HANDOFF_PROMPT_TEMPLATE <<'EOF' || true
-Constellation's installer just laid hook shims under .claude/hooks/constellation/ and skills under .claude/skills/constellation/. The canonical matcher set Constellation needs lives at __INSTALL_DIR__/.claude/settings.json — read it to see exactly which PreToolUse / PostToolUse / Stop / SubagentStop / SessionStart matchers to add.
-
-Plan the following (you are in plan mode — produce the plan, wait for my approval, then execute):
-
-1. Merge Constellation's hook matchers into MY ./.claude/settings.json (creating the file if it is missing). For each matcher in __INSTALL_DIR__/.claude/settings.json, add an equivalent entry to mine with the command path rewritten from .claude/hooks/<script>.sh to .claude/hooks/constellation/<script>.sh. APPEND-NOT-FUSE: never edit my existing matchers. If I already have an overlapping matcher (e.g. on Read|Edit|Write), add Constellation's as a sibling so both fire.
-
-2. In your plan, include (a) the unified JSON diff to MY settings.json and (b) the full contents of every script under .claude/hooks/constellation/ so I can audit what runs on every tool call.
-
-3. After my plan-mode approval, start the visualizer in the background:
-       CONSTELLATION_TARGET_ROOT="$PWD" npm run dev --prefix __INSTALL_DIR__
-   Wait ~2 seconds, verify http://127.0.0.1:47317/health returns {"ok":true}, and tell me the visualizer is at http://localhost:47318.
-EOF
-HANDOFF_PROMPT="${HANDOFF_PROMPT_TEMPLATE//__INSTALL_DIR__/$INSTALL_DIR}"
-
-print_manual_paste() {
-  say ""
-  say "Open Claude Code in this directory and paste this prompt:"
-  say ""
-  printf '%s\n' "$HANDOFF_PROMPT"
-  say ""
-  say "(Once Claude finishes, the visualizer will be at http://localhost:47318.)"
-}
-
-if [ -t 0 ] && command -v claude >/dev/null 2>&1; then
-  say ""
-  printf 'Open Claude Code now in this directory with the handoff prompt loaded? [Y/n]: '
-  read -r ans
-  case "$ans" in
-    n|N|no)
-      print_manual_paste
-      ;;
-    *)
-      say ""
-      say "Launching Claude Code in plan mode..."
-      exec claude --permission-mode plan "$HANDOFF_PROMPT"
-      # Only reached if exec failed:
-      err "Couldn't exec claude. Falling back to manual paste."
-      print_manual_paste
-      ;;
-  esac
-elif ! command -v claude >/dev/null 2>&1; then
-  say ""
-  say "(\`claude\` CLI not on PATH — install Claude Code, then paste this:)"
-  print_manual_paste
-else
-  # Non-interactive: just print so the caller can use it.
-  print_manual_paste
+say ""
+say "Merging Constellation hooks into .claude/settings.json ..."
+if ! node "$INSTALL_DIR/scripts/install-settings.mjs" \
+       --install-root "$INSTALL_DIR" \
+       --target-root  "$TARGET"; then
+  fail "Settings merge declined or failed. Hooks and skills are installed; re-run when ready."
 fi
+
+# 9. Start dev server in background -----------------------------------------
+
+# Read the configured ports so we don't hardcode them in two places.
+DAEMON_PORT="$(jq -r '.daemon.port' "$INSTALL_DIR/constellation.config.json")"
+WEB_PORT="$(jq -r '.web.port' "$INSTALL_DIR/constellation.config.json")"
+
+# nohup + setsid (when present) detaches the supervisor from this shell so
+# closing the terminal doesn't kill it. setsid is non-portable; the nohup
+# fallback works on macOS where setsid isn't installed by default.
+say ""
+say "Starting Constellation visualizer (target: $TARGET) ..."
+LOG_DIR="$TARGET/.constellation"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/dev.log"
+if command -v setsid >/dev/null 2>&1; then
+  setsid sh -c "cd '$INSTALL_DIR' && CONSTELLATION_TARGET_ROOT='$TARGET' npm run dev >'$LOG_FILE' 2>&1" </dev/null &
+else
+  ( cd "$INSTALL_DIR" && CONSTELLATION_TARGET_ROOT="$TARGET" nohup npm run dev >"$LOG_FILE" 2>&1 </dev/null & )
+fi
+
+# Poll daemon health for up to ~10s.
+ready=0
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  sleep 0.5
+  if curl -fsS -m 0.5 "http://127.0.0.1:$DAEMON_PORT/health" >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
+done
+
+if [ "$ready" -eq 1 ]; then
+  say ""
+  say "Visualizer ready at http://localhost:$WEB_PORT"
+  say "  - Hover any tile to see its description; click to pin."
+  say "  - Run /constellation:describe-codebase later to populate tile descriptions."
+  say "  - Live agent overlay turns on automatically inside Claude Code sessions."
+  say "  - Stop the visualizer with: pkill -f 'npm run dev' (logs at $LOG_FILE)"
+  exit 0
+fi
+
+err "Daemon didn't come up within 10s. Logs at $LOG_FILE — try 'cd $INSTALL_DIR && npm run dev' to see what went wrong."
+exit 1

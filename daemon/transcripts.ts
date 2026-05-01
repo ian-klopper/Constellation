@@ -3,11 +3,14 @@
  * surfaced tool_use (and, for the main agent, every assistant text block)
  * into the lifecycle reducer. Replaces agent-watch.sh and agent-main-watch.sh
  * — same logic, no shell, no separate process per agent, no pgrep dedup.
+ *
+ * Watchers are keyed by the lifecycle composite key (`${sessionId}:${id}`),
+ * so two parallel sessions in the same repo each get their own main
+ * transcript watcher without collision.
  */
 import { promises as fs, watch as fsWatch } from "node:fs";
-import path from "node:path";
 import type { ActiveAgent } from "@/lib/types";
-import type { Lifecycle } from "./lifecycle";
+import { Lifecycle } from "./lifecycle";
 import { formatActivity, type ToolInput } from "./activity";
 
 const WATCH_TOOLS = new Set([
@@ -22,13 +25,15 @@ const POLL_MS = 1_000;
 type Stop = () => void;
 
 export class TranscriptWatcher {
-  private background = new Map<string, Stop>(); // targetId → stopper
-  private main: { path: string; stop: Stop } | null = null;
+  // composite key → stopper
+  private background = new Map<string, Stop>();
+  // sessionId → main watcher
+  private main = new Map<string, { path: string; stop: Stop }>();
 
   constructor(private lifecycle: Lifecycle) {}
 
-  watchBackground(targetId: string, transcriptPath: string, cwd: string): void {
-    this.background.get(targetId)?.();
+  watchBackground(targetKey: string, transcriptPath: string, cwd: string): void {
+    this.background.get(targetKey)?.();
     let stopped = false;
     let offset = 0;
     let lastActivityMs = Date.now();
@@ -36,8 +41,8 @@ export class TranscriptWatcher {
 
     const tick = async () => {
       if (stopped) return;
-      if (!this.lifecycle.has(targetId)) {
-        this.stopBackground(targetId);
+      if (!this.lifecycle.has(targetKey)) {
+        this.stopBackground(targetKey);
         return;
       }
       try {
@@ -47,7 +52,7 @@ export class TranscriptWatcher {
           offset = stat.size;
           const update = lastToolUpdate(content, cwd);
           if (update) {
-            this.lifecycle.applyTranscriptUpdate(targetId, update);
+            this.lifecycle.applyTranscriptUpdate(targetKey, update);
             lastActivityMs = Date.now();
             isIdle = false;
           }
@@ -56,7 +61,7 @@ export class TranscriptWatcher {
           !isIdle &&
           Date.now() - lastActivityMs >= BG_IDLE_AFTER_MS
         ) {
-          this.lifecycle.markIdleIfPresent(targetId);
+          this.lifecycle.markIdleIfPresent(targetKey);
           isIdle = true;
         }
       } catch {
@@ -65,23 +70,25 @@ export class TranscriptWatcher {
     };
 
     const interval = setInterval(tick, POLL_MS);
-    this.background.set(targetId, () => {
+    this.background.set(targetKey, () => {
       stopped = true;
       clearInterval(interval);
     });
   }
 
-  watchMain(transcriptPath: string): void {
-    if (this.main && this.main.path === transcriptPath) return;
-    this.main?.stop();
+  watchMain(sessionId: string, transcriptPath: string): void {
+    const existing = this.main.get(sessionId);
+    if (existing && existing.path === transcriptPath) return;
+    existing?.stop();
 
+    const targetKey = Lifecycle.key(sessionId, "main");
     let stopped = false;
     let offset = 0;
 
     const tick = async () => {
       if (stopped) return;
-      if (!this.lifecycle.has("main")) {
-        this.stopMain();
+      if (!this.lifecycle.has(targetKey)) {
+        this.stopMain(sessionId);
         return;
       }
       try {
@@ -91,7 +98,7 @@ export class TranscriptWatcher {
           offset = stat.size;
           const update = mainUpdate(content);
           if (update && Object.keys(update).length > 0) {
-            this.lifecycle.applyTranscriptUpdate("main", update);
+            this.lifecycle.applyTranscriptUpdate(targetKey, update);
           }
         }
       } catch {
@@ -100,34 +107,39 @@ export class TranscriptWatcher {
     };
 
     const interval = setInterval(tick, POLL_MS);
-    this.main = {
+    this.main.set(sessionId, {
       path: transcriptPath,
       stop: () => {
         stopped = true;
         clearInterval(interval);
       },
-    };
+    });
   }
 
-  stopFor(id: string): void {
-    if (id === "main") this.stopMain();
-    else this.stopBackground(id);
+  stopFor(targetKey: string): void {
+    const idx = targetKey.indexOf(":");
+    if (idx < 0) return;
+    const sessionId = targetKey.slice(0, idx);
+    const id = targetKey.slice(idx + 1);
+    if (id === "main") this.stopMain(sessionId);
+    else this.stopBackground(targetKey);
   }
 
   closeAll(): void {
     for (const [, stop] of this.background) stop();
     this.background.clear();
-    this.stopMain();
+    for (const [, w] of this.main) w.stop();
+    this.main.clear();
   }
 
-  private stopBackground(id: string): void {
-    this.background.get(id)?.();
-    this.background.delete(id);
+  private stopBackground(key: string): void {
+    this.background.get(key)?.();
+    this.background.delete(key);
   }
 
-  private stopMain(): void {
-    this.main?.stop();
-    this.main = null;
+  private stopMain(sessionId: string): void {
+    this.main.get(sessionId)?.stop();
+    this.main.delete(sessionId);
   }
 }
 

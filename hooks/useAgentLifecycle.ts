@@ -16,6 +16,12 @@ import type { ActiveAgent } from "@/lib/types";
 const { REMOVE_FADE_MS, REMOVE_FADE_BUFFER_MS } = OVERLAY_TIMING;
 
 export type DisplayAgent = ActiveAgent & {
+  /**
+   * Stable per-agent client key. Composite of sessionId + id so two
+   * parallel sessions in the same repo (each with id="main") don't
+   * collide in React keys, lifecycle reconciliation, or position maps.
+   */
+  key: string;
   /** Wall-clock ms when this agent first showed up. */
   mountedAt: number;
   /** Wall-clock ms when this agent disappeared (still rendering for fade-out). */
@@ -47,13 +53,15 @@ export function useAgentLifecycle(snapshot: ActiveAgent[]): DisplayAgent[] {
 
 function merge(prev: DisplayAgent[], next: ActiveAgent[]): DisplayAgent[] {
   const now = Date.now();
-  const prevById = new Map(prev.map((a) => [a.id, a]));
-  const nextIds = new Set(next.map((a) => a.id));
+  const prevByKey = new Map(prev.map((a) => [a.key, a]));
+  const nextKeys = new Set(next.map(keyOf));
 
   const merged: DisplayAgent[] = next.map((a) => {
-    const existing = prevById.get(a.id);
+    const key = keyOf(a);
+    const existing = prevByKey.get(key);
     return {
       ...a,
+      key,
       mountedAt: existing?.mountedAt ?? now,
       removingAt: undefined,
     };
@@ -61,7 +69,7 @@ function merge(prev: DisplayAgent[], next: ActiveAgent[]): DisplayAgent[] {
 
   // Keep recently-removed agents around briefly so they can fade out.
   for (const a of prev) {
-    if (nextIds.has(a.id)) continue;
+    if (nextKeys.has(a.key)) continue;
     const removingAt = a.removingAt ?? now;
     if (now - removingAt >= REMOVE_FADE_MS) continue;
     merged.push({ ...a, removingAt });
@@ -70,4 +78,8 @@ function merge(prev: DisplayAgent[], next: ActiveAgent[]): DisplayAgent[] {
   // Sort to keep stack ordering deterministic across renders.
   merged.sort((x, y) => x.startedAt - y.startedAt);
   return merged;
+}
+
+function keyOf(a: ActiveAgent): string {
+  return `${a.sessionId}:${a.id}`;
 }

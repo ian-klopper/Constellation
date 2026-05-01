@@ -47,12 +47,19 @@ export type CodebaseTree = {
   tree: DirectoryNode;
 };
 
-// Lifecycle-file shape written by hooks (today: bash; soon: TS daemon)
-// and read by /api/agents. The frontend shape (DisplayAgent) extends this
-// with mountedAt/removingAt for fade animation — that's a client-only
-// concern and stays in components/AgentOverlay.tsx.
+// Lifecycle-file shape written by the daemon and read by /api/agents.
+// Every agent belongs to a Claude Code session (sessionId, from the hook
+// stdin) running in a specific repo (cwd, absolute path). Two parallel
+// sessions in the same repo each get their own "main" without colliding —
+// the daemon namespaces by (sessionId, id) internally and on disk.
+//
+// The frontend shape (DisplayAgent) extends this with mountedAt/removingAt
+// for fade animation — that's a client-only concern and stays in
+// components/AgentOverlay.tsx.
 export const ActiveAgentSchema = z.object({
   id: z.string(),
+  sessionId: z.string(),
+  cwd: z.string(),
   subagent_type: z.string(),
   description: z.string(),
   startedAt: z.number(),
@@ -66,3 +73,21 @@ export const ActiveAgentSchema = z.object({
 });
 
 export type ActiveAgent = z.infer<typeof ActiveAgentSchema>;
+
+// One row in the top-left repo switcher. Derived from the lifecycle
+// snapshot: any repo with at least one active agent shows up here.
+export type RepoSummary = {
+  repoPath: string;
+  repoName: string;
+  sessionCount: number;
+  agentCount: number;
+  lastActiveAt: number;
+};
+
+// What the SSE stream and /api/agents return. Wrapping agents alongside
+// repos lets the client keep the switcher list in sync with no extra
+// poll.
+export type AgentsPayload = {
+  agents: ActiveAgent[];
+  repos: RepoSummary[];
+};

@@ -60,7 +60,7 @@ function compute(
     const cardPos = a.currentPath
       ? cardPosition(a.currentPath, registry, stackCount)
       : null;
-    out.set(a.id, cardPos ?? parkPosition(parkIdx++));
+    out.set(a.key, cardPos ?? parkPosition(parkIdx++));
   }
   return out;
 }

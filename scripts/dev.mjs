@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 /**
  * Dev supervisor — starts the constellation daemon (the bash-hook
- * replacement) alongside `next dev`. Handles idempotent re-spawn (skips
- * the daemon if its pid file points to a live process), forwards stdio,
- * and shuts both children down cleanly on Ctrl-C.
+ * replacement) alongside `next dev`. Both children spawn idempotently:
+ * the daemon skips its spawn when its pid file points to a live process,
+ * and `next dev` skips when something is already serving on the
+ * configured web port. That makes re-running `npm run dev` (or
+ * re-running `install.sh` from a second repo) a safe no-op once
+ * Constellation is already up.
  */
 import { spawn } from "node:child_process";
+import { createConnection } from "node:net";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -46,6 +50,25 @@ function daemonAlreadyRunning() {
   } catch {
     return false;
   }
+}
+
+// TCP probe: returns true iff something is already accepting connections
+// on 127.0.0.1:<port>. Short timeout so a missed answer doesn't stall
+// the supervisor boot.
+function portInUse(port) {
+  return new Promise((resolve) => {
+    const sock = createConnection({ host: "127.0.0.1", port, timeout: 250 });
+    let settled = false;
+    const finish = (used) => {
+      if (settled) return;
+      settled = true;
+      sock.destroy();
+      resolve(used);
+    };
+    sock.once("connect", () => finish(true));
+    sock.once("timeout", () => finish(false));
+    sock.once("error", () => finish(false));
+  });
 }
 
 const children = [];
@@ -103,6 +126,17 @@ process.on("SIGTERM", shutdown);
 
 if (TARGET_ROOT !== INSTALL_ROOT) {
   console.log(`[supervisor] target = ${TARGET_ROOT}`);
+}
+
+const webBusy = await portInUse(config.web.port);
+if (webBusy) {
+  // Another supervisor is already serving on this port — nothing to do.
+  // We don't need to start the daemon either: the existing supervisor
+  // already manages it (or the standalone daemon is fine on its own).
+  console.log(
+    `[supervisor] Constellation already running at http://localhost:${config.web.port} — nothing to start.`,
+  );
+  process.exit(0);
 }
 
 startDaemon();

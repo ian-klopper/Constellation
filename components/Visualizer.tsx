@@ -19,7 +19,13 @@ import { AgentOverlay } from "./AgentOverlay";
 import { PinController } from "./PinController";
 import type { CodebaseTree, FileNode, TreeNode } from "@/lib/types";
 
-export function Visualizer({ tree }: { tree: CodebaseTree }) {
+export function Visualizer({
+  tree,
+  root,
+}: {
+  tree: CodebaseTree;
+  root: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
@@ -133,7 +139,7 @@ export function Visualizer({ tree }: { tree: CodebaseTree }) {
             onClose={() => setPinned(null)}
           />
         </div>
-        <AgentOverlay />
+        <AgentOverlay root={root} />
         <PinController />
       </TileRegistryProvider>
     </HoverContext.Provider>

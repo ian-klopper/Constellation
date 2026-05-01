@@ -7,6 +7,7 @@
  */
 "use client";
 
+import { useMemo } from "react";
 import { OVERLAY, OVERLAY_TIMING, OVERLAY_MOTION } from "@/lib/constants";
 import { AgentIcon } from "./AgentIcon";
 import { AgentBubble } from "./AgentBubble";
@@ -22,9 +23,17 @@ const { ICON_SIZE } = OVERLAY;
 const { IDLE_DEBOUNCE_MS, MOUNT_FADE_MS } = OVERLAY_TIMING;
 const { TRANSFORM_MS, OPACITY_MS, EASING } = OVERLAY_MOTION;
 
-export function AgentOverlay() {
-  const snapshot = useAgentStream();
-  const agents = useAgentLifecycle(snapshot);
+export function AgentOverlay({ root }: { root: string }) {
+  const { agents: allAgents } = useAgentStream();
+  // Only show agents whose owning repo is the one currently being
+  // visualized — agents from a different repo would have currentPaths
+  // relative to a tree we aren't rendering, so they'd land at (0,0)
+  // anyway. Filtering here keeps the React tree clean.
+  const filtered = useMemo(
+    () => allAgents.filter((a) => a.cwd === root),
+    [allAgents, root],
+  );
+  const agents = useAgentLifecycle(filtered);
   const positions = useAgentPositions(agents);
   const now = useIdleClock();
 
@@ -36,7 +45,7 @@ export function AgentOverlay() {
       className="pointer-events-none fixed inset-0 z-50"
     >
       {agents.map((a) => {
-        const pos = positions.get(a.id);
+        const pos = positions.get(a.key);
         if (!pos) return null;
         const isFading = a.removingAt !== undefined;
         const isMounting = now - a.mountedAt < MOUNT_FADE_MS;
@@ -44,7 +53,7 @@ export function AgentOverlay() {
         const opacity = isFading || isMounting || idle ? 0 : 1;
         return (
           <div
-            key={a.id}
+            key={a.key}
             className="absolute"
             style={{
               left: 0,

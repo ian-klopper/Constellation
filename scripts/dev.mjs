@@ -69,7 +69,7 @@ function startDaemon() {
 }
 
 function startNext() {
-  const proc = spawn("npx", ["next", "dev"], {
+  const proc = spawn("npx", ["next", "dev", "-p", String(config.web.port)], {
     cwd: INSTALL_ROOT,
     stdio: "inherit",
   });

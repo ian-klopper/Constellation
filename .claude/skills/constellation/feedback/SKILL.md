@@ -5,19 +5,11 @@ description: File a labeled GitHub issue against the Constellation public repo d
 
 # constellation:feedback
 
-You file a single GitHub issue against `ian-klopper/Constellation` describing what the user said is broken or confusing about Constellation. Everything happens in one tool-use pass: gather redacted context, draft the issue, show it to the user, ask for confirmation, then either submit via `gh` or fall back to printing the draft for manual filing.
-
-## Hard rules
-
-1. **One issue per invocation.** Do not split a single complaint across multiple issues. If the user describes two unrelated problems, ask them to invoke the skill twice.
-2. **Privacy is a positive allowlist.** Only the fields enumerated in *Context to gather* below ever go in the issue. If you find yourself wanting to include something not on that list, do not include it.
-3. **No transcript content. No file contents. No environment variables. No `$HOME`. No absolute paths.** Repo identity is `basename "$PWD"`, never the full path.
-4. **One confirmation gate.** The user sees the rendered draft, the GitHub-identity disclosure, then a `[y/N]` prompt. Anything other than literal `y` or `yes` is a no-op exit.
-5. **Never `gh auth login` for the user.** If `gh` is unauthenticated, print the hint and the draft; let them log in and re-run.
+File one issue against `ian-klopper/Constellation` describing what the user said is broken or confusing. One issue per invocation — if the user describes two unrelated problems, ask them to invoke twice. Privacy is a positive allowlist: only the fields enumerated below ever go in the issue. No transcript content, no file contents, no environment variables, no `$HOME`, no absolute paths. Repo identity is `basename "$PWD"`, never the full path. Never run `gh auth login` for the user.
 
 ## Context to gather
 
-Run these commands. If a command fails or returns empty, record the field as `(unknown)` — never substitute a guess.
+Run these commands. If a command fails or returns empty, record `(unknown)` — never substitute a guess.
 
 | Field | Command | Notes |
 |---|---|---|
@@ -25,19 +17,15 @@ Run these commands. If a command fails or returns empty, record the field as `(u
 | `daemon_health` | `curl -s -m 1 http://127.0.0.1:47317/health` | Parse the JSON response. Keep ONLY the keys `ok`, `uptime`, `agentCount`, `port`. Drop every other key. If the call fails, record `(daemon down or unreachable)`. |
 | `os` | `uname -s` | One word: `Darwin`, `Linux`, etc. |
 | `node_version` | `node -v` | e.g. `v22.16.0`. |
-| `user_description` | (the free-form text the user passed when invoking the skill) | Use as-is, but strip any absolute paths you can detect (`/Users/...`, `/home/...`, `C:\Users\...`) before including. If you redact, note `[path redacted]` in place. |
+| `user_description` | (the free-form text passed when invoking the skill) | Use as-is, but strip any absolute paths you can detect (`/Users/...`, `/home/...`, `C:\Users\...`) before including. If you redact, note `[path redacted]` in place. |
 
-The Constellation install path is **not** auto-detected (the install/target architecture deliberately doesn't write a pointer file in the target). The issue body asks the user to follow up with the SHA in a comment if version info is needed for triage.
+The Constellation install path is **not** auto-detected. If version info is needed for triage, the issue body asks the user to follow up with the SHA in a comment.
 
 ## Drafting
 
-Title format:
+Title: `[via:dogfood] <one-line summary derived from user_description>`. Keep under 70 chars; truncate the summary if needed; strip leading whitespace and quotation marks.
 
-    [via:dogfood] <one-line summary derived from user_description>
-
-Keep the title under 70 characters; truncate the summary if needed. Strip leading whitespace and quotation marks the user might have included.
-
-Body format (markdown):
+Body:
 
     **Reported via** `/constellation:feedback`
 
@@ -59,25 +47,19 @@ Body format (markdown):
     Filed via the `/constellation:feedback` skill. No transcript content,
     file contents, or absolute paths were included.
 
-## Show the draft + identity disclosure
+## Show + confirm
 
-Print, in this order:
+Print, in this order: the rendered title, the rendered body exactly as it would land on GitHub, then the GitHub identity disclosure (use `gh api user --jq .login`; on silent failure use `(not authenticated)`):
 
-1. The rendered title.
-2. The rendered body, exactly as it would land on GitHub.
-3. The GitHub identity disclosure line. Get the username with `gh api user --jq .login` (silent failure → use `(not authenticated)`):
+    This issue will be filed under your GitHub identity (@<username>) and is publicly visible at https://github.com/ian-klopper/Constellation/issues.
 
-       This issue will be filed under your GitHub identity (@<username>) and is publicly visible at https://github.com/ian-klopper/Constellation/issues.
+    Submit this issue? [y/N]
 
-4. The confirmation prompt:
-
-       Submit this issue? [y/N]
-
-If the user types anything other than `y` or `yes`, exit cleanly with the message `Cancelled — no issue filed.` Do not retry, do not partially submit.
+Anything other than literal `y` or `yes` exits cleanly with `Cancelled — no issue filed.` Do not retry, do not partially submit.
 
 ## Submit
 
-If the user confirms:
+On confirmation:
 
     gh issue create \
       --repo ian-klopper/Constellation \
@@ -85,58 +67,12 @@ If the user confirms:
       --title "<title>" \
       --body-file <(echo "<body>")
 
-After the call returns, read the resulting issue:
+Then verify the label landed:
 
     gh issue view <number> --repo ian-klopper/Constellation --json labels --jq '.labels[].name'
 
-If `via:dogfood` is **not** in the returned labels, print:
+If `via:dogfood` is missing from the returned labels, print that the issue was filed at `<url>` but the label was dropped (the user isn't a collaborator, so custom labels were ignored — triage may take longer; the issue itself is fine). Otherwise print `Filed: <url>`.
 
-    Issue filed at <url>, but the via:dogfood label was dropped (your GitHub
-    account isn't a collaborator on this repo, so custom labels were ignored).
-    Triage may take longer. The issue itself is fine.
+## `gh` failures
 
-Otherwise print:
-
-    Filed: <url>
-
-## `gh` failure paths
-
-| Failure | Action |
-|---|---|
-| `gh` is not on PATH | Print: `gh isn't installed. Install: https://cli.github.com/. Below is the rendered draft you can paste at https://github.com/ian-klopper/Constellation/issues/new manually.` Then print title + body. Exit non-zero. |
-| `gh auth status` fails (not authenticated) | Print: `gh is not authenticated. Run \`gh auth login\` and re-invoke the skill. Below is the rendered draft.` Then print title + body. Exit non-zero. |
-| `gh issue create` errors out for any other reason (network, repo missing, rate limit, etc.) | Print the gh error verbatim, then: `Submission failed. Below is the rendered draft you can paste at https://github.com/ian-klopper/Constellation/issues/new manually.` Then print title + body. Exit non-zero. |
-
-In every failure case, the rendered draft is printed so the user has it to paste manually. They never lose what they wrote.
-
-## Examples
-
-User invocation:
-
-    /constellation:feedback "tile descriptions are clipping mid-word at narrow widths"
-
-Expected title:
-
-    [via:dogfood] tile descriptions are clipping mid-word at narrow widths
-
-Expected body (illustrative — your gathered values will differ):
-
-    **Reported via** `/constellation:feedback`
-
-    ## What's wrong
-
-    tile descriptions are clipping mid-word at narrow widths
-
-    ## Environment
-
-    - Repo (basename only): `my-side-project`
-    - Daemon health: `{"ok":true,"uptime":342,"agentCount":1,"port":47317}`
-    - OS: `Darwin`
-    - Node: `v22.16.0`
-    - Constellation install: not auto-detected. If the bug appears
-      version-related, run `git -C <your-clone-path> log -1 --format=%H`
-      and paste the SHA in a follow-up comment.
-
-    ---
-    Filed via the `/constellation:feedback` skill. No transcript content,
-    file contents, or absolute paths were included.
+In every failure case, print the rendered draft so the user has it to paste manually — they never lose what they wrote. Specifically: if `gh` isn't on PATH, hint them to install it (`https://cli.github.com/`); if `gh auth status` fails, hint them to run `gh auth login` and re-invoke; if `gh issue create` fails for any other reason (network, repo missing, rate limit), print the error verbatim and the draft. Exit non-zero in every failure case.

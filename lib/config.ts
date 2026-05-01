@@ -28,6 +28,9 @@ export type Config = {
     port: number;
     pidFile: string;
   };
+  web: {
+    port: number;
+  };
   agentTtlSeconds: number;
 };
 

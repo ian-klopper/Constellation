@@ -16,5 +16,8 @@
     "port": 47317,
     "pidFile": ".constellation/daemon.pid"
   },
+  "web": {
+    "port": 47318
+  },
   "agentTtlSeconds": 1800
 }

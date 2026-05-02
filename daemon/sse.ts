@@ -5,7 +5,7 @@
  * pipes through to here.
  */
 import type { ServerResponse } from "node:http";
-import type { AgentsPayload } from "@/lib/types";
+import type { AgentsPayload } from "../lib/types";
 
 const KEEPALIVE_MS = 25_000;
 

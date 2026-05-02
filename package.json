@@ -9,7 +9,9 @@
     "dev": "node ./scripts/dev.mjs",
     "dev:next": "next dev -p 47318",
     "daemon": "tsx daemon/index.ts",
-    "build": "next build",
+    "build": "npm run build:daemon && npm run build:web",
+    "build:daemon": "tsc -p tsconfig.daemon.json",
+    "build:web": "next build",
     "start": "next start",
     "lint": "next lint"
   },

@@ -16,7 +16,11 @@ Repo management:
 
 Daemon control:
   status              Print daemon health, registered repo count, log path.
-  start, stop, service, logs — coming in a follow-up commit (launchd).
+  start               Load Constellation's launchd agent (Mac).
+  stop                Unload Constellation's launchd agent (Mac).
+  service install     Install the launchd plist + run the daemon at login.
+  service uninstall   Tear down the launchd plist.
+  logs [-f]           Print (or tail) ~/.constellation/logs/daemon.log.
 
 Visualizer:
   open                Open the visualizer in your browser, scoped to cwd.

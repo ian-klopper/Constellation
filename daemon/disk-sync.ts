@@ -4,7 +4,7 @@
  * /api/agents fallback without thrashing the filesystem when the touch
  * hook fires every tool call.
  */
-import type { ActiveAgent } from "@/lib/types";
+import type { ActiveAgent } from "../lib/types";
 import {
   fileNameFor,
   removeAgentFile,

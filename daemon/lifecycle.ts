@@ -19,7 +19,7 @@ import {
   type ActiveAgent,
   type AgentsPayload,
   type RepoSummary,
-} from "@/lib/types";
+} from "../lib/types";
 import type { DiskSync } from "./disk-sync";
 import type { SseBroker } from "./sse";
 import type { RepoRegistry } from "./registry";

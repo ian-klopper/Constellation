@@ -11,8 +11,8 @@
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { ActiveAgent } from "@/lib/types";
-import { repoHash } from "@/lib/user-dirs";
+import type { ActiveAgent } from "../lib/types";
+import { repoHash } from "../lib/user-dirs";
 
 export async function writeAgentFile(
   stateDir: string,

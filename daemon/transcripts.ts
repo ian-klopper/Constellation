@@ -9,7 +9,7 @@
  * transcript watcher without collision.
  */
 import { promises as fs, watch as fsWatch } from "node:fs";
-import type { ActiveAgent } from "@/lib/types";
+import type { ActiveAgent } from "../lib/types";
 import { Lifecycle } from "./lifecycle";
 import { formatActivity, type ToolInput } from "./activity";
 

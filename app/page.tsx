@@ -2,8 +2,8 @@
  * The home page — the only page in the app. Reads the whole project on
  * the server, then hands the result to the map and the live-agent
  * display. Accepts ?repo=<absolute-path> to switch which repo is being
- * visualized; falls back to resolveTargetRoot() (CONSTELLATION_TARGET_ROOT
- * env, then cwd) when the param is missing or invalid.
+ * visualized; falls back to `process.cwd()` (the install root, under
+ * self-dev) when the param is missing or invalid.
  */
 import path from "node:path";
 import { existsSync } from "node:fs";
@@ -12,7 +12,6 @@ import { Visualizer } from "@/components/Visualizer";
 import { RepoSwitcher } from "@/components/RepoSwitcher";
 import { DetailSlider } from "@/components/DetailSlider";
 import { fetchRepos } from "@/lib/daemon-client";
-import { resolveTargetRoot } from "@/lib/config";
 import type { RepoSummary } from "@/lib/types";
 
 type SearchParams = Promise<{ repo?: string | string[] }>;
@@ -24,8 +23,7 @@ export default async function HomePage({
 }) {
   const params = await searchParams;
   const requested = Array.isArray(params.repo) ? params.repo[0] : params.repo;
-  const fallbackRoot = resolveTargetRoot();
-  const root = resolveRequestedRoot(requested, fallbackRoot);
+  const root = resolveRequestedRoot(requested, process.cwd());
 
   const [tree, daemonRepos] = await Promise.all([
     scanProject(root),
@@ -53,9 +51,9 @@ export default async function HomePage({
 }
 
 // Trust the searchParam only if it's an absolute path that exists. Anything
-// else falls back to the env-driven default. This keeps the URL surface
-// safe (no path traversal) and recovers gracefully when a session whose
-// repo just got removed is bookmarked.
+// else falls back to the cwd default. This keeps the URL surface safe (no
+// path traversal) and recovers gracefully when a session whose repo just
+// got removed is bookmarked.
 function resolveRequestedRoot(
   requested: string | undefined,
   fallback: string,

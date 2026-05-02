@@ -7,10 +7,17 @@
  * The hook shims fire-and-forget POST events at us. Daemon down ⇒ silent
  * no-op in the shim ⇒ Claude Code session keeps working. That invariant
  * is the whole reason the bash hooks could be replaced safely.
+ *
+ * The daemon is a system-wide singleton: one process watches every repo
+ * whose hooks point at this port, and all state lives under
+ * `~/.constellation/`. There is no per-target binding — events arrive
+ * tagged with `cwd`, the lifecycle namespaces by it, and the on-disk
+ * filenames carry a repo hash so two repos can't collide.
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { loadConfig, resolveTargetRoot } from "../lib/config";
+import { loadConfig } from "../lib/config";
+import { userPidPath, userStateDir } from "../lib/user-dirs";
 import { Lifecycle } from "./lifecycle";
 import { TranscriptWatcher } from "./transcripts";
 import { DiskSync } from "./disk-sync";
@@ -19,13 +26,9 @@ import { startServer } from "./server";
 import { clearAgentFiles } from "./atomic-write";
 
 async function main() {
-  // Config (port, watchedTools, ttl) is install-rooted — we read it from the
-  // supervisor's cwd. State (lifecycle JSON, pidfile) is target-rooted —
-  // it lives next to the repo being visualized.
   const config = loadConfig();
-  const targetRoot = resolveTargetRoot();
-  const stateDir = path.join(targetRoot, config.stateDir);
-  const pidFile = path.join(targetRoot, config.daemon.pidFile);
+  const stateDir = userStateDir();
+  const pidFile = userPidPath();
 
   if (process.env.CONST_FRESH === "1") {
     await clearAgentFiles(stateDir);

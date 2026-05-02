@@ -15,7 +15,6 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Project } from "ts-morph";
 import type { CodebaseTree } from "./types";
-import { resolveTargetRoot } from "./config";
 import { SCAN_LIMITS } from "./constants";
 import { discoverFiles } from "./scan/discover";
 import { extractSymbols } from "./scan/symbols";
@@ -29,7 +28,7 @@ export { countTree };
 const COLLAPSED_PLACEHOLDER = "__collapsed__";
 
 export async function scanProject(
-  root: string = resolveTargetRoot(),
+  root: string = process.cwd(),
 ): Promise<CodebaseTree> {
   const { tsFiles, otherFiles, collapsedDirs } = await discoverFiles(root);
 

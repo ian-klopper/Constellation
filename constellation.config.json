@@ -1,5 +1,4 @@
 {
-  "stateDir": ".constellation/agents",
   "watchedTools": [
     "Read",
     "Edit",
@@ -13,8 +12,7 @@
     "WebSearch"
   ],
   "daemon": {
-    "port": 47317,
-    "pidFile": ".constellation/daemon.pid"
+    "port": 47317
   },
   "web": {
     "port": 47318

@@ -133,19 +133,34 @@ async function copyHooks(installRoot, target) {
 
 function appendGitignore(target) {
   const gi = path.join(target, ".gitignore");
-  const line = ".constellation/";
+  // Ignore Constellation's runtime state, but commit the generated
+  // descriptions sidecar so collaborators see them without re-running
+  // `constellation describe`. The pattern is `.constellation/*` (not
+  // `.constellation/`) because git won't recurse into a fully-ignored
+  // directory, so a `!` negate against a file inside it would be a no-op.
+  const block = [
+    ".constellation/*",
+    "!.constellation/descriptions.json",
+    "!.constellation/descriptions.yaml",
+    "!.constellation/descriptions.yml",
+  ];
   if (existsSync(gi)) {
     const existing = readFileSync(gi, "utf8");
-    if (existing.split(/\r?\n/).includes(line)) return;
+    const lines = existing.split(/\r?\n/);
+    const present = block.filter((l) => lines.includes(l));
+    if (present.length === block.length) return;
+    const missing = block.filter((l) => !lines.includes(l));
     appendFileSync(
       gi,
-      existing.endsWith("\n") ? `${line}\n` : `\n${line}\n`,
+      (existing.endsWith("\n") ? "" : "\n") + missing.join("\n") + "\n",
       "utf8",
     );
-    console.log(`✓ Appended ${line} to .gitignore`);
+    console.log(
+      `✓ Updated .gitignore (${missing.length} Constellation line${missing.length === 1 ? "" : "s"} added)`,
+    );
   } else {
-    appendFileSync(gi, `${line}\n`, "utf8");
-    console.log(`✓ Created .gitignore with ${line}`);
+    appendFileSync(gi, block.join("\n") + "\n", "utf8");
+    console.log(`✓ Created .gitignore with Constellation rules`);
   }
 }
 

@@ -30,8 +30,15 @@ dist/
 next-env.d.ts
 *.tsbuildinfo
 
-# Constellation runtime state (live subagent tracking)
-.constellation/
+# Constellation runtime state (live subagent tracking) — but the
+# generated descriptions sidecar is committed so collaborators see
+# them without re-running `constellation describe`.
+# (Note: pattern is .constellation/* not .constellation/ so the negates
+# below can match — git skips ignored dirs entirely otherwise.)
+.constellation/*
+!.constellation/descriptions.json
+!.constellation/descriptions.yaml
+!.constellation/descriptions.yml
 
 # Claude Code — keep user-local overrides out of the repo
 .claude/settings.local.json

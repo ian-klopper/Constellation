@@ -15,10 +15,13 @@ Repo management:
   rm                  Unregister the current repo. Hooks/settings are
                       left in place; pass --purge to remove them too.
   list                Show the registered repos and their live status.
-  describe            Generate one-sentence plain-English descriptions
-                      for every file in the current repo and write them
-                      to .constellation/descriptions.json. Skips files
-                      already covered; pass --force to regenerate.
+  describe            Generate plain-English descriptions for every file
+                      in the current repo and write them to
+                      .constellation/descriptions.json. Skips files
+                      already covered. Flags:
+                        --force, -f            regenerate every file
+                        --yes, -y              skip the confirm prompt
+                        --model, -m haiku|sonnet|opus  (default sonnet)
 
 Daemon control:
   status              Print daemon health, registered repo count, log path.

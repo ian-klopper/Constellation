@@ -17,7 +17,9 @@ import { canonicalCwd } from "./util.mjs";
 const SIDECAR_PATH = ".constellation/descriptions.json";
 const TONE_PROMPT_PATH = "cli/description-tone.txt";
 const COST_CAP_USD = 5;
-const MODEL = "sonnet";
+const ALLOWED_MODELS = new Set(["haiku", "sonnet", "opus"]);
+const DEFAULT_MODEL = "sonnet";
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 // Mirrors lib/scan/discover.ts:IGNORE. Kept simple — substring checks
 // instead of glob patterns. If something here drifts, the visible
@@ -48,7 +50,13 @@ const IGNORE_EXTS = new Set([
 const MAX_FILE_BYTES = 500_000; // skip huge files — not useful to describe
 
 export default async function describe({ installRoot, args }) {
-  const flags = parseFlags(args);
+  let flags;
+  try {
+    flags = parseFlags(args);
+  } catch (err) {
+    console.error(err.message);
+    return 64;
+  }
   const target = canonicalCwd();
 
   if (!(await commandExists("claude"))) {
@@ -90,7 +98,7 @@ export default async function describe({ installRoot, args }) {
     );
   }
   console.log(
-    `Running Claude Code (${MODEL}); cost cap $${COST_CAP_USD}. ` +
+    `Running Claude Code (${flags.model}); cost cap $${COST_CAP_USD}. ` +
       `This usually takes 1–5 minutes.`,
   );
 
@@ -114,13 +122,22 @@ export default async function describe({ installRoot, args }) {
   const tonePrompt = await loadTonePrompt(installRoot);
   const userPrompt = buildUserPrompt(todo);
 
+  const stopSpinner = startSpinner(
+    `Asking Claude (${flags.model}) to describe ${todo.length} ` +
+      `file${todo.length === 1 ? "" : "s"}`,
+  );
   const result = await runClaude({
     cwd: target,
     systemPrompt: tonePrompt,
     userPrompt,
+    model: flags.model,
   });
+  stopSpinner();
   if (result.code !== 0) {
     console.error(`Claude exited with code ${result.code}.`);
+    if (result.stderr) {
+      console.error(result.stderr.trimEnd());
+    }
     return result.code || 1;
   }
 
@@ -149,15 +166,62 @@ export default async function describe({ installRoot, args }) {
 }
 
 function parseFlags(args) {
-  const flags = { force: false, yes: false };
+  const flags = { force: false, yes: false, model: DEFAULT_MODEL };
   // bin/constellation passes [cmd, ...rest]; cli/add.mjs invokes us
   // directly with just the flags. Skip a leading "describe" if present.
   const start = args[0] === "describe" ? 1 : 0;
-  for (const a of args.slice(start)) {
+  const rest = args.slice(start);
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
     if (a === "--force" || a === "-f") flags.force = true;
     else if (a === "--yes" || a === "-y") flags.yes = true;
+    else if (a === "--model" || a === "-m") {
+      const v = rest[++i];
+      if (!v || !ALLOWED_MODELS.has(v)) {
+        throw new Error(
+          `--model must be one of: ${[...ALLOWED_MODELS].join(", ")} ` +
+            `(got ${JSON.stringify(v ?? "")}).`,
+        );
+      }
+      flags.model = v;
+    } else if (a.startsWith("--model=")) {
+      const v = a.slice("--model=".length);
+      if (!ALLOWED_MODELS.has(v)) {
+        throw new Error(
+          `--model must be one of: ${[...ALLOWED_MODELS].join(", ")} ` +
+            `(got ${JSON.stringify(v)}).`,
+        );
+      }
+      flags.model = v;
+    }
   }
   return flags;
+}
+
+// Lightweight spinner on stderr so the user knows the long claude run
+// hasn't hung. Returns a stop fn that clears the line. No-op when stderr
+// isn't a TTY (CI, piped output) so logs stay clean.
+function startSpinner(label) {
+  if (!process.stderr.isTTY) {
+    process.stderr.write(`${label}...\n`);
+    return () => {};
+  }
+  let i = 0;
+  const start = Date.now();
+  const tick = () => {
+    const elapsed = Math.floor((Date.now() - start) / 1000);
+    const m = Math.floor(elapsed / 60);
+    const s = elapsed % 60;
+    const time = m > 0 ? `${m}m${String(s).padStart(2, "0")}s` : `${s}s`;
+    const frame = SPINNER_FRAMES[i++ % SPINNER_FRAMES.length];
+    process.stderr.write(`\r\x1b[K${frame} ${label}... ${time}`);
+  };
+  tick();
+  const id = setInterval(tick, 100);
+  return () => {
+    clearInterval(id);
+    process.stderr.write("\r\x1b[K");
+  };
 }
 
 function commandExists(cmd) {
@@ -249,7 +313,7 @@ function buildUserPrompt(paths) {
   ].join("\n");
 }
 
-async function runClaude({ cwd, systemPrompt, userPrompt }) {
+async function runClaude({ cwd, systemPrompt, userPrompt, model }) {
   return await new Promise((resolve) => {
     const args = [
       "--print",
@@ -259,20 +323,24 @@ async function runClaude({ cwd, systemPrompt, userPrompt }) {
       "--output-format", "json",
       "--no-session-persistence",
       "--max-budget-usd", String(COST_CAP_USD),
-      "--model", MODEL,
+      "--model", model,
       userPrompt,
     ];
+    // Capture stderr instead of inheriting so claude's output doesn't
+    // collide with our spinner; print it after the run if non-empty.
     const proc = spawn("claude", args, {
       cwd,
-      stdio: ["ignore", "pipe", "inherit"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
+    let stderr = "";
     proc.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
+    proc.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
     proc.on("error", (err) => {
       console.error(`Failed to spawn claude: ${err.message}`);
-      resolve({ code: 1, stdout: "" });
+      resolve({ code: 1, stdout: "", stderr: "" });
     });
-    proc.on("exit", (code) => resolve({ code: code ?? 1, stdout }));
+    proc.on("exit", (code) => resolve({ code: code ?? 1, stdout, stderr }));
   });
 }
 

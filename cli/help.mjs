@@ -10,9 +10,18 @@ Repo management:
   add                 Wire the current repo into Constellation: copy hook
                       shims, merge .claude/settings.json, register with
                       the daemon. Run from inside the repo's git root.
+                      Prompts to generate plain-English descriptions
+                      (--no-describe to skip).
   rm                  Unregister the current repo. Hooks/settings are
                       left in place; pass --purge to remove them too.
   list                Show the registered repos and their live status.
+  describe            Generate plain-English descriptions for every file
+                      in the current repo and write them to
+                      .constellation/descriptions.json. Skips files
+                      already covered. Flags:
+                        --force, -f            regenerate every file
+                        --yes, -y              skip the confirm prompt
+                        --model, -m haiku|sonnet|opus  (default sonnet)
 
 Daemon control:
   status              Print daemon health, registered repo count, log path.

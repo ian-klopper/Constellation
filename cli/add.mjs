@@ -9,6 +9,7 @@ import { spawn } from "node:child_process";
 import { copyFile, mkdir, readdir, chmod } from "node:fs/promises";
 import { existsSync, readFileSync, appendFileSync } from "node:fs";
 import path from "node:path";
+import { createInterface } from "node:readline/promises";
 import { canonicalCwd, postDaemon } from "./util.mjs";
 
 const HOOK_SUBDIR = ".claude/hooks/constellation";
@@ -22,6 +23,8 @@ export default async function add({ installRoot, args }) {
     );
     return 1;
   }
+
+  const noDescribe = args.includes("--no-describe");
 
   console.log(`Adding ${target} to Constellation...`);
   console.log("");
@@ -54,6 +57,10 @@ export default async function add({ installRoot, args }) {
     );
   }
 
+  if (!noDescribe) {
+    await maybeRunDescribe(installRoot);
+  }
+
   console.log("");
   console.log(
     "Done. Open http://localhost:47318/?repo=" +
@@ -61,6 +68,40 @@ export default async function add({ installRoot, args }) {
       " to view.",
   );
   return 0;
+}
+
+async function maybeRunDescribe(installRoot) {
+  console.log("");
+  console.log(
+    "Constellation can generate plain-English, one-sentence descriptions",
+  );
+  console.log(
+    "for every file in this repo (using Claude Code). Without them, tiles",
+  );
+  console.log("on the visualizer just show their filename.");
+  console.log("");
+  if (!process.stdin.isTTY) {
+    console.log(
+      "Skipping description generation (stdin is not a TTY). Run " +
+        "`constellation describe` later to generate them.",
+    );
+    return;
+  }
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = (await rl.question(
+    "Generate descriptions now? [Y/n]: ",
+  )).trim();
+  rl.close();
+  if (answer !== "" && !/^y(es)?$/i.test(answer)) {
+    console.log(
+      "Skipped. Run `constellation describe` whenever you want them.",
+    );
+    return;
+  }
+  // Don't pass --yes here — let describe show its own model picker so
+  // the user can choose haiku/sonnet/opus as part of this flow.
+  const describe = await import("./describe.mjs");
+  await describe.default({ installRoot, args: ["describe"] });
 }
 
 async function copyHooks(installRoot, target) {
@@ -94,19 +135,34 @@ async function copyHooks(installRoot, target) {
 
 function appendGitignore(target) {
   const gi = path.join(target, ".gitignore");
-  const line = ".constellation/";
+  // Ignore Constellation's runtime state, but commit the generated
+  // descriptions sidecar so collaborators see them without re-running
+  // `constellation describe`. The pattern is `.constellation/*` (not
+  // `.constellation/`) because git won't recurse into a fully-ignored
+  // directory, so a `!` negate against a file inside it would be a no-op.
+  const block = [
+    ".constellation/*",
+    "!.constellation/descriptions.json",
+    "!.constellation/descriptions.yaml",
+    "!.constellation/descriptions.yml",
+  ];
   if (existsSync(gi)) {
     const existing = readFileSync(gi, "utf8");
-    if (existing.split(/\r?\n/).includes(line)) return;
+    const lines = existing.split(/\r?\n/);
+    const present = block.filter((l) => lines.includes(l));
+    if (present.length === block.length) return;
+    const missing = block.filter((l) => !lines.includes(l));
     appendFileSync(
       gi,
-      existing.endsWith("\n") ? `${line}\n` : `\n${line}\n`,
+      (existing.endsWith("\n") ? "" : "\n") + missing.join("\n") + "\n",
       "utf8",
     );
-    console.log(`✓ Appended ${line} to .gitignore`);
+    console.log(
+      `✓ Updated .gitignore (${missing.length} Constellation line${missing.length === 1 ? "" : "s"} added)`,
+    );
   } else {
-    appendFileSync(gi, `${line}\n`, "utf8");
-    console.log(`✓ Created .gitignore with ${line}`);
+    appendFileSync(gi, block.join("\n") + "\n", "utf8");
+    console.log(`✓ Created .gitignore with Constellation rules`);
   }
 }
 

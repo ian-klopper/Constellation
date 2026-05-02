@@ -20,6 +20,7 @@ const subcommands = {
   ls: () => import("../cli/list.mjs"),
   status: () => import("../cli/status.mjs"),
   open: () => import("../cli/open.mjs"),
+  describe: () => import("../cli/describe.mjs"),
   start: () => import("../cli/service.mjs"),
   stop: () => import("../cli/service.mjs"),
   service: () => import("../cli/service.mjs"),

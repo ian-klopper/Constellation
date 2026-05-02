@@ -12,7 +12,7 @@
  * run a CLI command before the visualizer notices the repo.
  */
 import path from "node:path";
-import { promises as fs } from "node:fs";
+import { promises as fs, realpathSync } from "node:fs";
 import { userReposPath, userDir } from "../lib/user-dirs";
 
 export type RegisteredRepo = {
@@ -66,13 +66,16 @@ export class RepoRegistry {
 
   /**
    * Idempotent insert. Returns true if a new entry was added.
+   * Canonicalizes the path (realpath) so /tmp/foo and /private/tmp/foo
+   * — same dir on macOS — don't end up as two separate entries.
    */
   register(repoPath: string, source: "manual" | "auto" = "manual"): boolean {
-    if (!path.isAbsolute(repoPath)) return false;
-    if (this.repos.has(repoPath)) return false;
-    this.repos.set(repoPath, {
-      path: repoPath,
-      name: path.basename(repoPath) || repoPath,
+    const p = canonicalize(repoPath);
+    if (!p) return false;
+    if (this.repos.has(p)) return false;
+    this.repos.set(p, {
+      path: p,
+      name: path.basename(p) || p,
       addedAt: Math.floor(Date.now() / 1000),
       source,
     });
@@ -82,18 +85,20 @@ export class RepoRegistry {
 
   /**
    * Auto-register on first event from an unknown cwd. Same as register()
-   * but tagged source="auto" so the UI can treat it differently if it
-   * wants. No-op if already registered.
+   * but tagged source="auto". No-op if already registered.
    */
   touch(repoPath: string): void {
-    if (!repoPath || !path.isAbsolute(repoPath)) return;
-    if (this.repos.has(repoPath)) return;
-    this.register(repoPath, "auto");
+    const p = canonicalize(repoPath);
+    if (!p) return;
+    if (this.repos.has(p)) return;
+    this.register(p, "auto");
   }
 
   unregister(repoPath: string): boolean {
-    if (!this.repos.has(repoPath)) return false;
-    this.repos.delete(repoPath);
+    const p = canonicalize(repoPath);
+    if (!p) return false;
+    if (!this.repos.has(p)) return false;
+    this.repos.delete(p);
     this.persist();
     return true;
   }
@@ -117,4 +122,20 @@ async function writeRegistry(snapshot: RegistryFile): Promise<void> {
   const tmp = `${target}.tmp.${process.pid}.${Date.now()}`;
   await fs.writeFile(tmp, JSON.stringify(snapshot, null, 2), "utf8");
   await fs.rename(tmp, target);
+}
+
+/**
+ * Returns the realpath of an absolute path, or "" if the input is empty
+ * or non-absolute. ENOENT (path doesn't exist on disk yet) falls back to
+ * the input — the registry stores the user's stated path, not a
+ * guarantee that the dir exists right now.
+ */
+function canonicalize(p: string): string {
+  if (!p || typeof p !== "string") return "";
+  if (!path.isAbsolute(p)) return "";
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
 }

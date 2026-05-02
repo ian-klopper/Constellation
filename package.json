@@ -2,6 +2,9 @@
   "name": "constellation",
   "version": "0.1.0",
   "private": true,
+  "bin": {
+    "constellation": "bin/constellation"
+  },
   "scripts": {
     "dev": "node ./scripts/dev.mjs",
     "dev:next": "next dev -p 47318",

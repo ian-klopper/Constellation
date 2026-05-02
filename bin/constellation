@@ -1,0 +1,49 @@
+#!/usr/bin/env node
+// Constellation CLI entry. Subcommand dispatch only — actual logic lives
+// in cli/<name>.mjs so each subcommand is independently testable.
+//
+// `import.meta.url` resolves to <install>/bin/constellation; install root
+// is therefore one dir up. Subcommand modules use that to find hook
+// templates, the install-settings merger, etc.
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const installRoot = path.dirname(
+  path.dirname(fileURLToPath(import.meta.url)),
+);
+
+const subcommands = {
+  add: () => import("../cli/add.mjs"),
+  rm: () => import("../cli/rm.mjs"),
+  remove: () => import("../cli/rm.mjs"),
+  list: () => import("../cli/list.mjs"),
+  ls: () => import("../cli/list.mjs"),
+  status: () => import("../cli/status.mjs"),
+  open: () => import("../cli/open.mjs"),
+  help: () => import("../cli/help.mjs"),
+};
+
+const args = process.argv.slice(2);
+const cmd = args[0];
+
+if (!cmd || cmd === "--help" || cmd === "-h" || cmd === "help") {
+  const help = await import("../cli/help.mjs");
+  await help.default({ args: args.slice(1), installRoot });
+  process.exit(0);
+}
+
+const loader = subcommands[cmd];
+if (!loader) {
+  console.error(`Unknown command: ${cmd}`);
+  console.error(`Run 'constellation help' for available commands.`);
+  process.exit(64);
+}
+
+const mod = await loader();
+try {
+  const code = await mod.default({ args: [cmd, ...args.slice(1)], installRoot });
+  process.exit(typeof code === "number" ? code : 0);
+} catch (err) {
+  console.error(`Error: ${err?.message ?? err}`);
+  process.exit(1);
+}

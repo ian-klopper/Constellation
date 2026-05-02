@@ -9,6 +9,7 @@ import { spawn } from "node:child_process";
 import { copyFile, mkdir, readdir, chmod } from "node:fs/promises";
 import { existsSync, readFileSync, appendFileSync } from "node:fs";
 import path from "node:path";
+import { createInterface } from "node:readline/promises";
 import { canonicalCwd, postDaemon } from "./util.mjs";
 
 const HOOK_SUBDIR = ".claude/hooks/constellation";
@@ -22,6 +23,8 @@ export default async function add({ installRoot, args }) {
     );
     return 1;
   }
+
+  const noDescribe = args.includes("--no-describe");
 
   console.log(`Adding ${target} to Constellation...`);
   console.log("");
@@ -54,6 +57,10 @@ export default async function add({ installRoot, args }) {
     );
   }
 
+  if (!noDescribe) {
+    await maybeRunDescribe(installRoot);
+  }
+
   console.log("");
   console.log(
     "Done. Open http://localhost:47318/?repo=" +
@@ -61,6 +68,38 @@ export default async function add({ installRoot, args }) {
       " to view.",
   );
   return 0;
+}
+
+async function maybeRunDescribe(installRoot) {
+  console.log("");
+  console.log(
+    "Constellation can generate plain-English, one-sentence descriptions",
+  );
+  console.log(
+    "for every file in this repo (using Claude Code). Without them, tiles",
+  );
+  console.log("on the visualizer just show their filename.");
+  console.log("");
+  if (!process.stdin.isTTY) {
+    console.log(
+      "Skipping description generation (stdin is not a TTY). Run " +
+        "`constellation describe` later to generate them.",
+    );
+    return;
+  }
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = (await rl.question(
+    "Generate descriptions now? [Y/n]: ",
+  )).trim();
+  rl.close();
+  if (answer !== "" && !/^y(es)?$/i.test(answer)) {
+    console.log(
+      "Skipped. Run `constellation describe` whenever you want them.",
+    );
+    return;
+  }
+  const describe = await import("./describe.mjs");
+  await describe.default({ installRoot, args: ["describe", "--yes"] });
 }
 
 async function copyHooks(installRoot, target) {

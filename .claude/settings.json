@@ -29,6 +29,15 @@
             "command": ".claude/hooks/agent-stop.sh"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/description-refresh.sh"
+          }
+        ]
       }
     ],
     "Stop": [

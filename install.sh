@@ -172,8 +172,15 @@ ensure_path_export() {
   # rc file, and do it idempotently. This is the standard pattern Cargo,
   # NVM, fnm, and asdf all use — without it a fresh ~/.local/bin install
   # leaves the 'constellation' command invisible in new terminals.
+  #
+  # Side effect: sets the global EDITED_RC to the rc path that already
+  # references $dir or that we just edited, so the final Next-steps block
+  # can quote the exact `source <rc>` command. Empty when no rc was
+  # edited or already-references-$dir (e.g. unknown shell, user declined,
+  # or an unsupported shell with no rc match).
   local dir="$1"
   local rc="" line=""
+  EDITED_RC=""
 
   case "${SHELL:-}" in
     */zsh)
@@ -208,6 +215,7 @@ ensure_path_export() {
     say ""
     say "Note: $dir isn't on your *current* PATH, but $rc already references it."
     say "Open a new terminal (or run 'source $rc') and 'constellation' will be on PATH."
+    EDITED_RC="$rc"
     return 0
   fi
 
@@ -223,6 +231,7 @@ ensure_path_export() {
     say ""
     say "✓ Updated $rc."
     say "  Run 'source $rc' or open a new terminal to pick up the change."
+    EDITED_RC="$rc"
   else
     say ""
     say "Skipped. To enable 'constellation' in new terminals, add this line to $rc:"
@@ -327,19 +336,42 @@ else
 fi
 
 # 6. Done --------------------------------------------------------------------
+#
+# The shell that's running install.sh started before we touched any rc
+# file, so its PATH is frozen at whatever it was on launch. Even if we
+# just appended an `export PATH=...` to ~/.zshrc, this process can't see
+# the new entry — and neither will the user's current terminal until
+# they open a new one or `source` the rc. Decide which command we tell
+# them to run next based on what *actually* works right now.
+
+if command -v constellation >/dev/null 2>&1; then
+  CLI_INVOCATION="constellation"
+  SHELL_HINT=""
+else
+  CLI_INVOCATION="$CLI_SRC"
+  if [ -n "${EDITED_RC:-}" ]; then
+    SHELL_HINT="Heads up: 'constellation' isn't on this shell's PATH yet. Open a new terminal (or run 'source $EDITED_RC') and the short 'constellation ...' form will work everywhere. Until then, use the absolute path below."
+  else
+    SHELL_HINT="Heads up: 'constellation' isn't on this shell's PATH yet. Open a new terminal once $LINK_DIR is on your PATH and the short 'constellation ...' form will work. Until then, use the absolute path below."
+  fi
+fi
 
 say ""
 say "✓ Constellation installed."
+if [ -n "$SHELL_HINT" ]; then
+  say ""
+  say "$SHELL_HINT"
+fi
 say ""
 say "Next steps:"
 say "  1. cd into a repo you want to track."
-say "  2. Run: constellation add"
+say "  2. Run: $CLI_INVOCATION add"
 say "     (Copies hook shims, merges .claude/settings.json, registers the repo with the daemon.)"
-say "  3. Run: constellation open"
+say "  3. Run: $CLI_INVOCATION open"
 say "     (Opens the visualizer in your browser, scoped to that repo.)"
 say ""
 say "Other useful commands:"
-say "  constellation list      Show all registered repos."
-say "  constellation status    Daemon health + log path."
-say "  constellation logs -f   Tail the daemon log."
-say "  constellation help      Full reference."
+say "  $CLI_INVOCATION list      Show all registered repos."
+say "  $CLI_INVOCATION status    Daemon health + log path."
+say "  $CLI_INVOCATION logs -f   Tail the daemon log."
+say "  $CLI_INVOCATION help      Full reference."

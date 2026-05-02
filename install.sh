@@ -166,6 +166,70 @@ install_node_20() {
   command -v node >/dev/null 2>&1
 }
 
+ensure_path_export() {
+  # $1: directory we just symlinked the CLI into. If it isn't on PATH,
+  # detect the user's shell, prompt to append a PATH export to the right
+  # rc file, and do it idempotently. This is the standard pattern Cargo,
+  # NVM, fnm, and asdf all use — without it a fresh ~/.local/bin install
+  # leaves the 'constellation' command invisible in new terminals.
+  local dir="$1"
+  local rc="" line=""
+
+  case "${SHELL:-}" in
+    */zsh)
+      rc="$HOME/.zshrc"
+      line="export PATH=\"$dir:\$PATH\""
+      ;;
+    */bash)
+      # macOS terminals are login shells (read .bash_profile). Linux
+      # interactive shells read .bashrc. Pick the right one.
+      if [ "$(uname)" = "Darwin" ]; then
+        rc="$HOME/.bash_profile"
+      else
+        rc="$HOME/.bashrc"
+      fi
+      line="export PATH=\"$dir:\$PATH\""
+      ;;
+    */fish)
+      rc="$HOME/.config/fish/config.fish"
+      line="set -gx PATH \"$dir\" \$PATH"
+      ;;
+  esac
+
+  if [ -z "$rc" ]; then
+    say ""
+    say "Note: $dir isn't on your PATH, and the installer can't auto-detect your shell (\$SHELL=${SHELL:-unset})."
+    say "Add an equivalent of this line to your shell's startup file:"
+    say "    export PATH=\"$dir:\$PATH\""
+    return 0
+  fi
+
+  if [ -f "$rc" ] && grep -Fq "$dir" "$rc"; then
+    say ""
+    say "Note: $dir isn't on your *current* PATH, but $rc already references it."
+    say "Open a new terminal (or run 'source $rc') and 'constellation' will be on PATH."
+    return 0
+  fi
+
+  say ""
+  say "$dir isn't on your PATH — without this fix, the 'constellation' command"
+  say "won't be found in new terminal windows."
+  if prompt_yn "Append the PATH export to $rc?"; then
+    mkdir -p "$(dirname "$rc")"
+    {
+      printf '\n# Added by Constellation installer\n'
+      printf '%s\n' "$line"
+    } >> "$rc"
+    say ""
+    say "✓ Updated $rc."
+    say "  Run 'source $rc' or open a new terminal to pick up the change."
+  else
+    say ""
+    say "Skipped. To enable 'constellation' in new terminals, add this line to $rc:"
+    say "    $line"
+  fi
+}
+
 ensure_dep git git "Constellation's installer needs git on PATH."
 ensure_dep jq  jq  "Constellation's hook shims need jq. macOS: 'brew install jq'. Debian/Ubuntu: 'apt install jq'."
 
@@ -240,16 +304,13 @@ else
   say "✓ Symlinked $LINK_TARGET → $CLI_SRC"
 fi
 
-# Warn if the chosen directory isn't on PATH. Most macOS shells include
-# /usr/local/bin already; ~/.local/bin commonly isn't.
+# Make sure the chosen directory is on PATH. Most macOS shells include
+# /usr/local/bin already; ~/.local/bin commonly isn't, so we offer to
+# append a PATH export to the user's shell rc file.
 LINK_DIR="$(dirname "$LINK_TARGET")"
 case ":$PATH:" in
   *":$LINK_DIR:"*) ;;
-  *)
-    say ""
-    say "Note: $LINK_DIR isn't on your PATH. Add this to your shell rc:"
-    say "    export PATH=\"$LINK_DIR:\$PATH\""
-    ;;
+  *) ensure_path_export "$LINK_DIR" ;;
 esac
 
 # 5. Set up launchd agent (Mac) ----------------------------------------------

@@ -1,37 +1,28 @@
-# Shared config helper sourced by every hook script. Resolves the project
-# root, reads constellation.config.json when present, and exports STATE_DIR
-# and PORT so scripts can stop hardcoding ".constellation/agents" and the
-# daemon port. Kept tiny and dependency-free (just jq, which the hooks
-# already require).
+# Shared config helper sourced by every hook script. Resolves the
+# user-level Constellation directory and exports PORT and STATE_DIR.
+# Reads ~/.constellation/config.json; if it isn't there yet (daemon
+# never booted on this machine), we still know the bundled default port
+# is 47317. The 500ms curl timeout in every hook means a missing
+# daemon turns into a silent no-op anyway, so the fallback is forgiving.
 #
-# Sibling-clone install: under Constellation's onboarding prompt, this
-# script gets copied into <target>/.claude/hooks/constellation/lib/, and the
-# target has no constellation.config.json (the plan decided against an
-# install.json pointer file). The else branch below is the foreign-target
-# path — its hardcoded defaults must match the install's
-# constellation.config.json defaults, or hooks won't reach the daemon.
+# CONSTELLATION_USER_DIR overrides the home for tests and alternate
+# installs. Production: ~/.constellation/.
 
-# CLAUDE_PROJECT_DIR is set by Claude Code; fall back to git toplevel for
-# manual invocations.
-PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)}"
-PROJECT_ROOT="${PROJECT_ROOT:-$PWD}"
-
-CONFIG_PATH="$PROJECT_ROOT/constellation.config.json"
+USER_DIR="${CONSTELLATION_USER_DIR:-$HOME/.constellation}"
+CONFIG_PATH="$USER_DIR/config.json"
+STATE_DIR="$USER_DIR/state/agents"
 
 config_get() {
   jq -r "$1" "$CONFIG_PATH" 2>/dev/null
 }
 
 if [ -f "$CONFIG_PATH" ]; then
-  STATE_DIR_REL="$(config_get '.stateDir')"
-  STATE_DIR_REL="${STATE_DIR_REL:-.constellation/agents}"
   PORT="$(config_get '.daemon.port')"
   PORT="${PORT:-47317}"
 else
-  # Foreign-target fallback. These constants must match the install's
-  # constellation.config.json defaults.
-  STATE_DIR_REL=".constellation/agents"
+  # Constellation hasn't booted on this machine yet (or someone wiped
+  # the user dir). Fall back to the bundled default port. If the daemon
+  # isn't actually running, the per-hook curl will time out at 500ms
+  # and the hook exits with `|| true`.
   PORT=47317
 fi
-
-STATE_DIR="$PROJECT_ROOT/$STATE_DIR_REL"

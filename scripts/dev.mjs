@@ -2,43 +2,35 @@
 /**
  * Dev supervisor — starts the constellation daemon (the bash-hook
  * replacement) alongside `next dev`. Both children spawn idempotently:
- * the daemon skips its spawn when its pid file points to a live process,
- * and `next dev` skips when something is already serving on the
- * configured web port. That makes re-running `npm run dev` (or
- * re-running `install.sh` from a second repo) a safe no-op once
- * Constellation is already up.
+ * the daemon skips its spawn when the user-dir pidfile points to a live
+ * process, and `next dev` skips when something is already serving on the
+ * configured web port. That makes re-running `npm run dev` a safe no-op
+ * once Constellation is already up.
+ *
+ * The supervisor is now Constellation-self-dev only: a packaged install
+ * runs the daemon under launchd, not under this script. End users open
+ * the visualizer separately.
  */
 import { spawn } from "node:child_process";
 import { createConnection } from "node:net";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
-// INSTALL_ROOT = where Constellation's code lives (this script's cwd).
-// TARGET_ROOT  = the repo being visualized. Equal to INSTALL_ROOT in
-// single-repo dev; set via CONSTELLATION_TARGET_ROOT under sibling-clone.
 const INSTALL_ROOT = process.cwd();
-const TARGET_ROOT = process.env.CONSTELLATION_TARGET_ROOT ?? INSTALL_ROOT;
 
-if (
-  process.env.CONSTELLATION_TARGET_ROOT !== undefined &&
-  !path.isAbsolute(process.env.CONSTELLATION_TARGET_ROOT)
-) {
-  console.error(
-    `[supervisor] CONSTELLATION_TARGET_ROOT must be an absolute path; got ${JSON.stringify(
-      process.env.CONSTELLATION_TARGET_ROOT,
-    )}`,
-  );
-  process.exit(1);
-}
+// Mirror lib/user-dirs.ts — kept inline because this file is .mjs and
+// can't import from the TypeScript module without an extra build step.
+const USER_DIR =
+  process.env.CONSTELLATION_USER_DIR && process.env.CONSTELLATION_USER_DIR !== ""
+    ? process.env.CONSTELLATION_USER_DIR
+    : path.join(os.homedir(), ".constellation");
+const PID_FILE = path.join(USER_DIR, "daemon.pid");
 
 const config = JSON.parse(
   await readFile(path.join(INSTALL_ROOT, "constellation.config.json"), "utf8"),
 );
-// Pidfile lives next to the lifecycle state — both target-rooted, so
-// stopping the supervisor in repo A and starting it in repo B doesn't
-// trip the "daemon already running" check on a stale file from A.
-const PID_FILE = path.join(TARGET_ROOT, config.daemon.pidFile);
 
 function daemonAlreadyRunning() {
   if (!existsSync(PID_FILE)) return false;
@@ -123,10 +115,6 @@ function shutdown() {
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
-
-if (TARGET_ROOT !== INSTALL_ROOT) {
-  console.log(`[supervisor] target = ${TARGET_ROOT}`);
-}
 
 const webBusy = await portInUse(config.web.port);
 if (webBusy) {

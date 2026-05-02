@@ -1,83 +1,60 @@
 /**
- * Reads constellation.config.json once per process and hands the parsed
- * shape to every server-side caller (the API route, the daemon, hook
- * shims). The file is the single source of truth for the lifecycle-state
- * directory, the watched-tools list, and the daemon's local port — kept
- * out of code so adding a tool or moving the state dir is a one-file
- * change.
+ * Reads Constellation's runtime config from `~/.constellation/config.json`.
+ * One file, one source of truth for the daemon port, the visualizer port,
+ * the watched-tools list, and the staleness TTL — shared across every
+ * repo the daemon watches.
  *
- * Two-root architecture: `loadConfig(installRoot)` always reads from the
- * install dir (port + watchedTools + ttl are install-level). `resolveStateDir`
- * and `resolveTargetRoot` deal with the target dir (where the visualized
- * repo lives, and where lifecycle state files get written). Under the
- * sibling-clone install model these are different directories; under
- * single-repo dev they're the same and `CONSTELLATION_TARGET_ROOT` is
- * unset, which falls through to `process.cwd()`.
+ * On first run the user-config file won't exist yet. We seed it from the
+ * bundled defaults at `<cwd>/constellation.config.json` (the repo's own
+ * file under self-dev, the install's file under the future global setup).
+ * After that, the bundled file is irrelevant — edits go to the user file.
  */
 // Intentionally not "server-only": this module is also imported by the
 // daemon (plain Node, not a Next.js bundle), where the server-only sentinel
 // throws at import time. The Next.js callers (lib/scan, /api/agents) are
 // already server-only by their own context.
-import { readFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+} from "node:fs";
 import path from "node:path";
+import { userConfigPath, userDir } from "./user-dirs";
 
 export type Config = {
-  stateDir: string;
   watchedTools: string[];
-  daemon: {
-    port: number;
-    pidFile: string;
-  };
-  web: {
-    port: number;
-  };
+  daemon: { port: number };
+  web: { port: number };
   agentTtlSeconds: number;
 };
 
 let cached: Config | null = null;
 
-export function loadConfig(installRoot: string = process.cwd()): Config {
+export function loadConfig(): Config {
   if (cached) return cached;
-  const raw = readFileSync(
-    path.join(installRoot, "constellation.config.json"),
-    "utf8",
-  );
-  const parsed = JSON.parse(raw) as Config;
-  cached = parsed;
-  return parsed;
+  ensureUserConfig();
+  const raw = readFileSync(userConfigPath(), "utf8");
+  cached = JSON.parse(raw) as Config;
+  return cached;
 }
 
-export function resolveStateDir(targetRoot: string): string {
-  // No default arg — callers must be intentional about which root holds state.
-  // The Config is install-rooted, but stateDir is a relative path joined onto
-  // the target.
-  return path.join(targetRoot, loadConfig().stateDir);
-}
-
-let warnedMissingTargetRoot = false;
-
-/**
- * Resolves the target repo (the one being visualized) from the
- * `CONSTELLATION_TARGET_ROOT` env var. Falls back to `process.cwd()` with a
- * one-time stderr warning when unset — that's the single-repo-dev path.
- * Throws on empty or relative env values to keep malformed input from
- * propagating into filesystem joins.
- */
-export function resolveTargetRoot(): string {
-  const env = process.env.CONSTELLATION_TARGET_ROOT;
-  if (env === undefined) {
-    if (!warnedMissingTargetRoot) {
-      warnedMissingTargetRoot = true;
-      console.warn(
-        "[constellation] CONSTELLATION_TARGET_ROOT unset; defaulting to cwd",
-      );
-    }
-    return process.cwd();
-  }
-  if (env === "" || !path.isAbsolute(env)) {
+function ensureUserConfig(): void {
+  const target = userConfigPath();
+  if (existsSync(target)) return;
+  mkdirSync(userDir(), { recursive: true });
+  const bundled = path.join(process.cwd(), "constellation.config.json");
+  if (!existsSync(bundled)) {
     throw new Error(
-      `CONSTELLATION_TARGET_ROOT must be a non-empty absolute path; got ${JSON.stringify(env)}`,
+      `User config missing at ${target} and no bundled defaults at ${bundled}. ` +
+        `Run the installer or copy a config manually.`,
     );
   }
-  return env;
+  copyFileSync(bundled, target);
+}
+
+// For tests — clears the in-process cache so a freshly written user config
+// is picked up on the next loadConfig() call.
+export function _resetConfigCache(): void {
+  cached = null;
 }

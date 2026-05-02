@@ -10,7 +10,8 @@
 import { NextResponse } from "next/server";
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import { loadConfig, resolveStateDir, resolveTargetRoot } from "@/lib/config";
+import { loadConfig } from "@/lib/config";
+import { userStateDir } from "@/lib/user-dirs";
 import {
   ActiveAgentSchema,
   type ActiveAgent,
@@ -21,8 +22,8 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  // Config is install-rooted (loadConfig reads from process.cwd(), which is
-  // the install dir under the supervisor). State files live in the target.
+  // Config and state both live under ~/.constellation/ — there is no
+  // per-target state any more.
   const config = loadConfig();
 
   // Try the daemon first — it's the authoritative source.
@@ -43,7 +44,7 @@ export async function GET() {
   }
 
   // Fallback: read the on-disk lifecycle files.
-  const stateDir = resolveStateDir(resolveTargetRoot());
+  const stateDir = userStateDir();
   let entries: string[];
   try {
     entries = await fs.readdir(stateDir);

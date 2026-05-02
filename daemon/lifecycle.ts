@@ -19,9 +19,10 @@ import {
   type ActiveAgent,
   type AgentsPayload,
   type RepoSummary,
-} from "@/lib/types";
+} from "../lib/types";
 import type { DiskSync } from "./disk-sync";
 import type { SseBroker } from "./sse";
+import type { RepoRegistry } from "./registry";
 import { formatActivity, type ToolInput } from "./activity";
 
 export type LifecycleEvent =
@@ -95,6 +96,7 @@ export class Lifecycle {
   constructor(
     private disk: DiskSync,
     private sse: SseBroker,
+    private registry: RepoRegistry,
     private hooks: LifecycleHooks = {},
   ) {}
 
@@ -135,6 +137,90 @@ export class Lifecycle {
     return { agents: this.snapshot(), repos: this.repos() };
   }
 
+  /**
+   * Authoritative repo list for the frontend's switcher. Joins the
+   * persistent registry (so registered-but-inactive repos show up)
+   * with live counts derived from the in-memory agent map.
+   */
+  repos(): RepoSummary[] {
+    const counts = this.activeCounts();
+    const out: RepoSummary[] = [];
+    const seen = new Set<string>();
+    for (const r of this.registry.list()) {
+      const c = counts.get(r.path);
+      out.push({
+        repoPath: r.path,
+        repoName: r.name,
+        sessionCount: c?.sessionCount ?? 0,
+        agentCount: c?.agentCount ?? 0,
+        lastActiveAt: c?.lastActiveAt ?? 0,
+      });
+      seen.add(r.path);
+    }
+    // A live repo that isn't registered yet (race with auto-register, or
+    // a stale agent file) still shows up so the switcher doesn't lose
+    // it. The registry.touch() in the route handler usually covers this.
+    for (const [repoPath, c] of counts) {
+      if (seen.has(repoPath)) continue;
+      out.push({
+        repoPath,
+        repoName: path.basename(repoPath) || repoPath,
+        sessionCount: c.sessionCount,
+        agentCount: c.agentCount,
+        lastActiveAt: c.lastActiveAt,
+      });
+    }
+    return out.sort((a, b) => {
+      // Repos with active agents float to the top, then by recency.
+      if (a.agentCount !== b.agentCount) return b.agentCount - a.agentCount;
+      return b.lastActiveAt - a.lastActiveAt;
+    });
+  }
+
+  /** Lifecycle-derived view: only repos with at least one live agent. */
+  activeRepos(): RepoSummary[] {
+    const out: RepoSummary[] = [];
+    for (const [repoPath, c] of this.activeCounts()) {
+      out.push({
+        repoPath,
+        repoName: path.basename(repoPath) || repoPath,
+        sessionCount: c.sessionCount,
+        agentCount: c.agentCount,
+        lastActiveAt: c.lastActiveAt,
+      });
+    }
+    return out.sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+  }
+
+  private activeCounts(): Map<
+    string,
+    { sessionCount: number; agentCount: number; lastActiveAt: number; sessions: Set<string> }
+  > {
+    const byRepo = new Map<
+      string,
+      { sessionCount: number; agentCount: number; lastActiveAt: number; sessions: Set<string> }
+    >();
+    for (const a of this.agents.values()) {
+      if (!a.cwd) continue;
+      const last = a.lastActiveAt ?? a.startedAt;
+      const cur = byRepo.get(a.cwd);
+      if (!cur) {
+        byRepo.set(a.cwd, {
+          sessionCount: 1,
+          agentCount: 1,
+          lastActiveAt: last,
+          sessions: new Set([a.sessionId]),
+        });
+      } else {
+        cur.agentCount += 1;
+        cur.sessions.add(a.sessionId);
+        cur.sessionCount = cur.sessions.size;
+        cur.lastActiveAt = Math.max(cur.lastActiveAt, last);
+      }
+    }
+    return byRepo;
+  }
+
   sessions(): SessionInfo[] {
     const bySession = new Map<string, SessionInfo>();
     for (const a of this.agents.values()) {
@@ -160,33 +246,6 @@ export class Lifecycle {
     return Array.from(bySession.values()).sort(
       (a, b) => b.lastActiveAt - a.lastActiveAt,
     );
-  }
-
-  repos(): RepoSummary[] {
-    const byRepo = new Map<string, RepoSummary & { sessions: Set<string> }>();
-    for (const a of this.agents.values()) {
-      if (!a.cwd) continue;
-      const cur = byRepo.get(a.cwd);
-      const last = a.lastActiveAt ?? a.startedAt;
-      if (!cur) {
-        byRepo.set(a.cwd, {
-          repoPath: a.cwd,
-          repoName: path.basename(a.cwd) || a.cwd,
-          sessionCount: 1,
-          agentCount: 1,
-          lastActiveAt: last,
-          sessions: new Set([a.sessionId]),
-        });
-      } else {
-        cur.agentCount += 1;
-        cur.sessions.add(a.sessionId);
-        cur.sessionCount = cur.sessions.size;
-        cur.lastActiveAt = Math.max(cur.lastActiveAt, last);
-      }
-    }
-    return Array.from(byRepo.values())
-      .map(({ sessions: _sessions, ...rest }) => rest)
-      .sort((a, b) => b.lastActiveAt - a.lastActiveAt);
   }
 
   applyEvent(event: LifecycleEvent): void {

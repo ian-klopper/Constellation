@@ -1,10 +1,10 @@
 /**
- * Coalesces rapid lifecycle mutations into one disk write per (session,
- * agent). Keeps the on-disk JSON files current for the legacy /api/agents
- * fallback without thrashing the filesystem when the touch hook fires
- * every tool call.
+ * Coalesces rapid lifecycle mutations into one disk write per (repo,
+ * session, agent). Keeps the on-disk JSON files current for the legacy
+ * /api/agents fallback without thrashing the filesystem when the touch
+ * hook fires every tool call.
  */
-import type { ActiveAgent } from "@/lib/types";
+import type { ActiveAgent } from "../lib/types";
 import {
   fileNameFor,
   removeAgentFile,
@@ -15,7 +15,7 @@ const FLUSH_DELAY_MS = 50;
 
 type PendingWrite =
   | { kind: "write"; agent: ActiveAgent }
-  | { kind: "delete"; sessionId: string; id: string };
+  | { kind: "delete"; cwd: string; sessionId: string; id: string };
 
 export class DiskSync {
   private timers = new Map<string, NodeJS.Timeout>();
@@ -24,15 +24,16 @@ export class DiskSync {
   constructor(private stateDir: string) {}
 
   scheduleWrite(agent: ActiveAgent): void {
-    const key = fileNameFor(agent.sessionId, agent.id);
+    const key = fileNameFor(agent.cwd, agent.sessionId, agent.id);
     this.pending.set(key, { kind: "write", agent });
     this.schedule(key);
   }
 
   scheduleDelete(agent: ActiveAgent): void {
-    const key = fileNameFor(agent.sessionId, agent.id);
+    const key = fileNameFor(agent.cwd, agent.sessionId, agent.id);
     this.pending.set(key, {
       kind: "delete",
+      cwd: agent.cwd,
       sessionId: agent.sessionId,
       id: agent.id,
     });
@@ -55,7 +56,7 @@ export class DiskSync {
       if (op.kind === "write") {
         await writeAgentFile(this.stateDir, op.agent);
       } else {
-        await removeAgentFile(this.stateDir, op.sessionId, op.id);
+        await removeAgentFile(this.stateDir, op.cwd, op.sessionId, op.id);
       }
     } catch (err) {
       console.warn(`[daemon] disk-sync ${key}:`, err);

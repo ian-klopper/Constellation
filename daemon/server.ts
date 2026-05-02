@@ -5,6 +5,7 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
+import { realpathSync } from "node:fs";
 import type { Lifecycle, LifecycleEvent } from "./lifecycle";
 import type { SseBroker } from "./sse";
 import type { RepoRegistry } from "./registry";
@@ -131,8 +132,10 @@ async function route(
       res.writeHead(400).end();
       return;
     }
-    // Auto-register the cwd before applying the event so the lifecycle
-    // reducer's broadcast already reflects the new entry.
+    // Canonicalize cwd before any lifecycle/registry write so a hook
+    // reporting /tmp/foo and a CLI reporting /private/tmp/foo (macOS)
+    // never produce two separate registry entries or two repo rows.
+    if (event.cwd) event.cwd = canonicalizePath(event.cwd);
     if (event.cwd) registry.touch(event.cwd);
     lifecycle.applyEvent(event);
     res.writeHead(204).end();
@@ -243,6 +246,15 @@ function pickStr(obj: Record<string, unknown>, path: string[]): string {
     } else return "";
   }
   return typeof cur === "string" ? cur : "";
+}
+
+function canonicalizePath(p: string): string {
+  if (!path.isAbsolute(p)) return p;
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
 }
 
 function pickBool(obj: Record<string, unknown>, path: string[]): boolean | null {

@@ -27,13 +27,153 @@ err() { printf '%s\n' "$*" >&2; }
 fail() { err "$*"; exit 1; }
 
 # 1. Preflight ---------------------------------------------------------------
+#
+# We need git (clone), node 20+ (build), and jq (the hook shims read the
+# daemon port from JSON config). Missing deps used to be a hard fail; now
+# the installer offers to install them via the platform package manager
+# (brew on macOS — bootstrapped on the fly if absent — and apt/dnf/pacman/apk
+# on Linux). Set CONSTELLATION_AUTO_INSTALL=1 to skip prompts (assume yes),
+# or CONSTELLATION_NO_AUTO_INSTALL=1 to revert to today's fail-hard behavior.
 
-command -v node >/dev/null 2>&1 || fail "Constellation needs Node 20 or newer (nodejs.org or 'nvm install 20')."
+prompt_yn() {
+  # $1: prompt text. Default Y on bare Enter.
+  if [ "${CONSTELLATION_AUTO_INSTALL:-0}" = "1" ]; then return 0; fi
+  if [ "${CONSTELLATION_NO_AUTO_INSTALL:-0}" = "1" ]; then return 1; fi
+  printf '%s [Y/n] ' "$1"
+  local reply=""
+  read -r reply || true
+  case "${reply:-y}" in
+    [yY]|[yY][eE][sS]|"") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+detect_pkg_manager() {
+  # Echoes brew | apt | dnf | pacman | apk | "" (none found).
+  if [ "$(uname)" = "Darwin" ]; then
+    if command -v brew >/dev/null 2>&1; then echo brew; else echo ""; fi
+    return
+  fi
+  if command -v apt-get >/dev/null 2>&1; then echo apt; return; fi
+  if command -v dnf     >/dev/null 2>&1; then echo dnf; return; fi
+  if command -v pacman  >/dev/null 2>&1; then echo pacman; return; fi
+  if command -v apk     >/dev/null 2>&1; then echo apk; return; fi
+  echo ""
+}
+
+bootstrap_brew() {
+  # macOS-only. Installs Homebrew if it's not already on PATH, then sources
+  # `brew shellenv` so the rest of this script can call `brew` directly.
+  command -v brew >/dev/null 2>&1 && return 0
+  prompt_yn "Homebrew (brew) is needed to install missing deps on macOS. Install it now from brew.sh?" || return 1
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || return 1
+  if [ -x /opt/homebrew/bin/brew ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [ -x /usr/local/bin/brew ]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+  fi
+  command -v brew >/dev/null 2>&1
+}
+
+install_pkg() {
+  # $1: package name. Caller must have already detected a manager.
+  local pkg="$1"
+  local mgr; mgr="$(detect_pkg_manager)"
+  case "$mgr" in
+    brew)   brew install "$pkg" ;;
+    apt)    sudo apt-get update && sudo apt-get install -y "$pkg" ;;
+    dnf)    sudo dnf install -y "$pkg" ;;
+    pacman) sudo pacman -S --noconfirm "$pkg" ;;
+    apk)    sudo apk add "$pkg" ;;
+    *)      return 1 ;;
+  esac
+}
+
+ensure_dep() {
+  # $1: command to probe (e.g. jq)
+  # $2: package name to install (often same as $1)
+  # $3: failure message if we can't auto-install or the user declines.
+  local cmd="$1" pkg="$2" failmsg="$3"
+  command -v "$cmd" >/dev/null 2>&1 && return 0
+
+  local mgr; mgr="$(detect_pkg_manager)"
+  if [ -z "$mgr" ] && [ "$(uname)" = "Darwin" ]; then
+    say ""
+    say "$cmd is missing, and Homebrew isn't installed yet."
+    bootstrap_brew || fail "$failmsg"
+    mgr="brew"
+  fi
+  if [ -z "$mgr" ]; then
+    fail "$failmsg"
+  fi
+
+  say ""
+  say "$cmd is missing. The installer can install '$pkg' via $mgr."
+  case "$mgr" in
+    apt|dnf|pacman|apk) say "(This will use sudo and may prompt for your password.)" ;;
+  esac
+  prompt_yn "Install $pkg now?" || fail "$failmsg"
+  install_pkg "$pkg" || fail "$failmsg"
+  command -v "$cmd" >/dev/null 2>&1 || fail "$failmsg (install ran but $cmd is still not on PATH)"
+}
+
+install_node_20() {
+  # Install Node 20 via the detected package manager. Only called when no
+  # `node` is on PATH at all — we never auto-upgrade an existing Node, since
+  # the user may have nvm/asdf/fnm pinning a version on purpose.
+  local mgr; mgr="$(detect_pkg_manager)"
+  if [ -z "$mgr" ] && [ "$(uname)" = "Darwin" ]; then
+    say ""
+    say "Node is missing, and Homebrew isn't installed yet."
+    bootstrap_brew || return 1
+    mgr="brew"
+  fi
+  if [ -z "$mgr" ]; then
+    return 1
+  fi
+  say ""
+  say "Node is missing. The installer can install Node 20 via $mgr."
+  case "$mgr" in
+    brew)
+      prompt_yn "Run: brew install node@20 (and brew link --overwrite --force node@20)?" || return 1
+      brew install node@20 || return 1
+      brew link --overwrite --force node@20 || return 1
+      ;;
+    apt)
+      say "(Uses NodeSource — Debian/Ubuntu's own 'nodejs' package is too old. Will use sudo.)"
+      prompt_yn "Run NodeSource setup_20.x + apt-get install -y nodejs?" || return 1
+      curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - || return 1
+      sudo apt-get install -y nodejs || return 1
+      ;;
+    dnf)
+      say "(Uses NodeSource. Will use sudo.)"
+      prompt_yn "Run NodeSource setup_20.x + dnf install -y nodejs?" || return 1
+      curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash - || return 1
+      sudo dnf install -y nodejs || return 1
+      ;;
+    pacman)
+      prompt_yn "Run: sudo pacman -S --noconfirm nodejs npm?" || return 1
+      sudo pacman -S --noconfirm nodejs npm || return 1
+      ;;
+    apk)
+      prompt_yn "Run: sudo apk add nodejs npm?" || return 1
+      sudo apk add nodejs npm || return 1
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  command -v node >/dev/null 2>&1
+}
+
+ensure_dep git git "Constellation's installer needs git on PATH."
+ensure_dep jq  jq  "Constellation's hook shims need jq. macOS: 'brew install jq'. Debian/Ubuntu: 'apt install jq'."
+
+if ! command -v node >/dev/null 2>&1; then
+  install_node_20 || fail "Constellation needs Node 20 or newer (nodejs.org or 'nvm install 20')."
+fi
 node_major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
-[ "$node_major" -ge 20 ] 2>/dev/null || fail "Constellation needs Node 20 or newer; you have $(node -v)."
-
-command -v jq >/dev/null 2>&1 || fail "Constellation's hook shims need jq. macOS: 'brew install jq'. Debian/Ubuntu: 'apt install jq'."
-command -v git >/dev/null 2>&1 || fail "Constellation's installer needs git on PATH."
+[ "$node_major" -ge 20 ] 2>/dev/null || fail "Constellation needs Node 20 or newer; you have $(node -v). Run 'nvm install 20' to upgrade without affecting other Node projects."
 
 # 2. Idempotent clone --------------------------------------------------------
 

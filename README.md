@@ -28,8 +28,12 @@ Re-run the same line later to update — the script detects an existing install 
 ### System dependencies
 
 - **Node 20+** (Next.js 16 requirement).
-- **`jq`** — used by the Claude Code hook shims. Install with `brew install jq` on macOS, `apt install jq` on Debian/Ubuntu.
+- **`jq`** — used by the Claude Code hook shims.
 - **git** — needed for the install + update flow.
+
+The installer will offer to install any of these for you on macOS (via Homebrew, bootstrapping `brew` itself if it's missing) and on the major Linux distros (`apt`, `dnf`, `pacman`, `apk`). Each install is gated on a y/N prompt with default Yes — press Enter to accept. Set `CONSTELLATION_AUTO_INSTALL=1` to skip the prompts (useful in CI), or `CONSTELLATION_NO_AUTO_INSTALL=1` to disable auto-install entirely and have the installer fail with a manual-install hint instead.
+
+Existing-but-too-old Node is the one case the installer won't touch automatically — if you have Node 18 from `nvm` or `asdf`, the installer prints `nvm install 20` and exits rather than risk shadowing your version manager.
 
 ## Use it on a repo
 

@@ -4,8 +4,10 @@
  * The hook shims POST events; /api/agents/stream pipes through to /agents/stream.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import path from "node:path";
 import type { Lifecycle, LifecycleEvent } from "./lifecycle";
 import type { SseBroker } from "./sse";
+import type { RepoRegistry } from "./registry";
 
 export type Server = ReturnType<typeof startServer>;
 
@@ -18,11 +20,12 @@ export function startServer(
   port: number,
   lifecycle: Lifecycle,
   sse: SseBroker,
+  registry: RepoRegistry,
 ) {
   const meta: ServerMeta = { port, startedAt: Date.now() };
   const server = createServer(async (req, res) => {
     try {
-      await route(req, res, lifecycle, sse, meta);
+      await route(req, res, lifecycle, sse, registry, meta);
     } catch (err) {
       console.warn("[daemon] route error:", err);
       if (!res.headersSent) {
@@ -39,6 +42,7 @@ async function route(
   res: ServerResponse,
   lifecycle: Lifecycle,
   sse: SseBroker,
+  registry: RepoRegistry,
   meta: ServerMeta,
 ): Promise<void> {
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -80,6 +84,44 @@ async function route(
     return;
   }
 
+  if (route === "GET /repos/active") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ repos: lifecycle.activeRepos() }));
+    return;
+  }
+
+  if (route === "POST /repos/register") {
+    const body = await readBody(req);
+    const payload = safeJson(body);
+    const repoPath = typeof payload.path === "string" ? payload.path : "";
+    if (!repoPath || !path.isAbsolute(repoPath)) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "path must be absolute" }));
+      return;
+    }
+    const created = registry.register(repoPath, "manual");
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, created }));
+    sse.broadcast(lifecycle.payload());
+    return;
+  }
+
+  if (route === "POST /repos/unregister") {
+    const body = await readBody(req);
+    const payload = safeJson(body);
+    const repoPath = typeof payload.path === "string" ? payload.path : "";
+    if (!repoPath) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "path required" }));
+      return;
+    }
+    const removed = registry.unregister(repoPath);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, removed }));
+    sse.broadcast(lifecycle.payload());
+    return;
+  }
+
   if (req.method === "POST" && url.pathname.startsWith("/event/")) {
     const eventName = url.pathname.slice("/event/".length);
     const body = await readBody(req);
@@ -89,6 +131,9 @@ async function route(
       res.writeHead(400).end();
       return;
     }
+    // Auto-register the cwd before applying the event so the lifecycle
+    // reducer's broadcast already reflects the new entry.
+    if (event.cwd) registry.touch(event.cwd);
     lifecycle.applyEvent(event);
     res.writeHead(204).end();
     return;

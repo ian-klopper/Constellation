@@ -23,6 +23,7 @@ import { TranscriptWatcher } from "./transcripts";
 import { DiskSync } from "./disk-sync";
 import { SseBroker } from "./sse";
 import { startServer } from "./server";
+import { RepoRegistry } from "./registry";
 import { clearAgentFiles } from "./atomic-write";
 
 async function main() {
@@ -39,7 +40,9 @@ async function main() {
 
   const sse = new SseBroker();
   const disk = new DiskSync(stateDir);
-  const lifecycle = new Lifecycle(disk, sse);
+  const registry = new RepoRegistry();
+  await registry.load();
+  const lifecycle = new Lifecycle(disk, sse, registry);
   const watchers = new TranscriptWatcher(lifecycle);
 
   lifecycle.setHooks({
@@ -50,7 +53,7 @@ async function main() {
 
   await lifecycle.loadFromDisk(stateDir);
 
-  const server = startServer(config.daemon.port, lifecycle, sse);
+  const server = startServer(config.daemon.port, lifecycle, sse, registry);
 
   console.log(
     `[daemon] listening on 127.0.0.1:${config.daemon.port}, stateDir=${stateDir}`,
@@ -63,6 +66,7 @@ async function main() {
     console.log(`[daemon] ${signal} — shutting down`);
     watchers.closeAll();
     await disk.flushAll();
+    await registry.flush();
     sse.close();
     server.close();
     await fs.rm(pidFile, { force: true });

@@ -370,6 +370,11 @@ function buildUserPrompt(paths) {
 
 async function runClaude({ cwd, systemPrompt, userPrompt, model }) {
   return await new Promise((resolve) => {
+    // The user prompt for a large repo (one bullet per file) easily runs
+    // into hundreds of KB. macOS's ARG_MAX is ~256 KB, so passing it as
+    // the trailing positional argument blows up at spawn time with
+    // E2BIG before claude ever runs. Pipe it through stdin instead;
+    // `claude --print` reads stdin when no positional prompt is given.
     const args = [
       "--print",
       "--system-prompt", systemPrompt,
@@ -379,13 +384,12 @@ async function runClaude({ cwd, systemPrompt, userPrompt, model }) {
       "--no-session-persistence",
       "--max-budget-usd", String(COST_CAP_USD),
       "--model", model,
-      userPrompt,
     ];
     // Capture stderr instead of inheriting so claude's output doesn't
     // collide with our spinner; print it after the run if non-empty.
     const proc = spawn("claude", args, {
       cwd,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "";
     let stderr = "";
@@ -396,6 +400,8 @@ async function runClaude({ cwd, systemPrompt, userPrompt, model }) {
       resolve({ code: 1, stdout: "", stderr: "" });
     });
     proc.on("exit", (code) => resolve({ code: code ?? 1, stdout, stderr }));
+    proc.stdin.on("error", () => {});
+    proc.stdin.end(userPrompt);
   });
 }
 

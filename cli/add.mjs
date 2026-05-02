@@ -98,8 +98,10 @@ async function maybeRunDescribe(installRoot) {
     );
     return;
   }
+  // Don't pass --yes here — let describe show its own model picker so
+  // the user can choose haiku/sonnet/opus as part of this flow.
   const describe = await import("./describe.mjs");
-  await describe.default({ installRoot, args: ["describe", "--yes"] });
+  await describe.default({ installRoot, args: ["describe"] });
 }
 
 async function copyHooks(installRoot, target) {

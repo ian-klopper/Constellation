@@ -97,11 +97,12 @@ export default async function describe({ installRoot, args }) {
         `Pass --force to regenerate.)`,
     );
   }
-  console.log(
-    `Running Claude Code (${flags.model}); cost cap $${COST_CAP_USD}. ` +
-      `This usually takes 1–5 minutes.`,
-  );
+  console.log(`Cost cap $${COST_CAP_USD}. This usually takes 1–5 minutes.`);
 
+  // Three confirm flows depending on what the caller has already decided:
+  //   1. --yes: no prompts at all; use whichever model was set.
+  //   2. --model passed but no --yes: just a y/n confirm.
+  //   3. neither: show the model picker (which doubles as the confirm).
   if (!flags.yes) {
     if (!process.stdin.isTTY) {
       console.error(
@@ -110,14 +111,29 @@ export default async function describe({ installRoot, args }) {
       );
       return 2;
     }
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    const answer = (await rl.question("Continue? [Y/n]: ")).trim();
-    rl.close();
-    if (answer !== "" && !/^y(es)?$/i.test(answer)) {
-      console.log("Cancelled.");
-      return 0;
+    if (flags.modelExplicit) {
+      const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+      const answer = (await rl.question(
+        `Continue with ${flags.model}? [Y/n]: `,
+      )).trim();
+      rl.close();
+      if (answer !== "" && !/^y(es)?$/i.test(answer)) {
+        console.log("Cancelled.");
+        return 0;
+      }
+    } else {
+      const picked = await pickModelAndConfirm(flags.model);
+      if (picked === null) {
+        console.log("Cancelled.");
+        return 0;
+      }
+      flags.model = picked;
     }
   }
+  console.log(`Running Claude Code (${flags.model})...`);
 
   const tonePrompt = await loadTonePrompt(installRoot);
   const userPrompt = buildUserPrompt(todo);
@@ -166,7 +182,12 @@ export default async function describe({ installRoot, args }) {
 }
 
 function parseFlags(args) {
-  const flags = { force: false, yes: false, model: DEFAULT_MODEL };
+  const flags = {
+    force: false,
+    yes: false,
+    model: DEFAULT_MODEL,
+    modelExplicit: false,
+  };
   // bin/constellation passes [cmd, ...rest]; cli/add.mjs invokes us
   // directly with just the flags. Skip a leading "describe" if present.
   const start = args[0] === "describe" ? 1 : 0;
@@ -184,6 +205,7 @@ function parseFlags(args) {
         );
       }
       flags.model = v;
+      flags.modelExplicit = true;
     } else if (a.startsWith("--model=")) {
       const v = a.slice("--model=".length);
       if (!ALLOWED_MODELS.has(v)) {
@@ -193,9 +215,42 @@ function parseFlags(args) {
         );
       }
       flags.model = v;
+      flags.modelExplicit = true;
     }
   }
   return flags;
+}
+
+// Combined model picker + confirm. Returns the chosen model, or null
+// if the user cancelled. Re-prompts on unparseable input rather than
+// guessing.
+async function pickModelAndConfirm(defaultModel) {
+  console.log("");
+  console.log("Pick a model:");
+  console.log("  1) haiku    fastest and cheapest, lower quality");
+  console.log("  2) sonnet   recommended balance (default)");
+  console.log("  3) opus     slowest and priciest, highest quality");
+  console.log("");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    while (true) {
+      const raw = await rl.question(
+        "Choice (1/2/3, or 'n' to cancel) [2]: ",
+      );
+      const ans = raw.trim().toLowerCase();
+      if (ans === "" || ans === "2" || ans === "s" || ans === "sonnet") {
+        return "sonnet";
+      }
+      if (ans === "1" || ans === "h" || ans === "haiku") return "haiku";
+      if (ans === "3" || ans === "o" || ans === "opus") return "opus";
+      if (ans === "n" || ans === "no" || ans === "cancel") return null;
+      console.log(
+        `Didn't understand "${raw.trim()}". Type 1/2/3, h/s/o, or 'n' to cancel.`,
+      );
+    }
+  } finally {
+    rl.close();
+  }
 }
 
 // Lightweight spinner on stderr so the user knows the long claude run

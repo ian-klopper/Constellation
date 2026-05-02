@@ -80,7 +80,7 @@
   "hooks/useAgentPositions.ts": "This figures out where on your screen each agent dot should sit by reading the actual position of the file tile it's anchored to, updating whenever you zoom, pan, or resize the window.",
   "hooks/useAgentStream.ts": "This opens a live connection to the server and keeps the agent list updated in under a second, falling back to periodic polling if the connection drops.",
   "hooks/useIdleClock.ts": "This ticks a clock a few times per second so the map can tell the difference between an agent that is actively working and one that has been sitting still long enough to be considered idle.",
-  "install.sh": "This is the one-shot global installer — it clones the project, builds the background process, puts the 'constellation' command on your PATH, and sets it up to start automatically at login on Mac.",
+  "install.sh": "This is the one-shot global installer — it offers to install any missing prerequisites (Homebrew, git, jq, Node), clones the project, builds the background process, puts the 'constellation' command on your PATH, and sets it up to start automatically at login on Mac.",
   "lib/classify.ts": "This looks at a thing a file shares with the rest of the app and decides what kind of thing it is — a visual element, a page route, a hook, a type — based on where the file lives and how the thing is named.",
   "lib/config.ts": "This reads Constellation's settings — the ports, the watched tools, the staleness timeout — from a single file in your home folder, seeding it from bundled defaults the very first time.",
   "lib/constants.ts": "This is the single list of sizes, timing values, and color settings that the map and the agent display draw from — change a number here and it takes effect everywhere at once.",

@@ -1,9 +1,17 @@
 #!/bin/bash
-# Fires on PostToolUse for Edit|Write|MultiEdit. Looks up the file's
-# current plain-English description in .constellation/descriptions.json
-# and injects an additionalContext nudge so the active agent updates
-# the sidecar entry in this same turn if the change altered what the
-# file does. No daemon involvement — purely client-side. Fails silent.
+# Fires on PostToolUse for Edit|Write|MultiEdit. Emits a single
+# additionalContext nudge with two prompts:
+#   1. Description — if the edit changed what the file does, update
+#      .constellation/descriptions.json so the visualizer's sidecar
+#      stays accurate.
+#   2. Learning — if the edit revealed something non-obvious worth
+#      remembering (hidden constraint, foot-gun, reusable pattern,
+#      wrong-then-right judgment call), append a tiny entry to
+#      .constellation/learnings.json. Surfaced back to Claude on
+#      future edits via .claude/hooks/learnings-surface.sh.
+# Both prompts are advisory — Claude can act on neither, one, or both
+# in the same turn. No daemon involvement; purely client-side. Fails
+# silent.
 
 PAYLOAD=$(cat)
 [ -z "$PAYLOAD" ] && exit 0
@@ -45,19 +53,23 @@ if [ -f "$SIDECAR" ]; then
 fi
 
 if [ -z "$CURRENT" ]; then
-  STATUS="There is no plain-English description for it yet. If you have a feel for what this file is for, add an entry to .constellation/descriptions.json."
+  DESC_STATUS="There is no plain-English description for it yet. If you have a feel for what this file is for, add an entry to .constellation/descriptions.json."
 else
-  STATUS="Its current plain-English description is: \"$CURRENT\". If your edit changed what this file is for, update that entry. Otherwise leave it alone."
+  DESC_STATUS="Its current plain-English description is: \"$CURRENT\". If your edit changed what this file is for, update that entry. Otherwise leave it alone."
 fi
 
-# Build the additionalContext JSON safely with jq so quoting in $CURRENT
-# can't break the output.
+# Build the additionalContext JSON safely with jq so quoting in
+# $DESC_STATUS can't break the output. One payload, two prompts.
 jq -nc \
   --arg path "$REL" \
-  --arg status "$STATUS" \
+  --arg desc_status "$DESC_STATUS" \
   '{
     hookSpecificOutput: {
       hookEventName: "PostToolUse",
-      additionalContext: ("Constellation: you just changed `\($path)`. \($status) Tone: as short as it can be while still being clear (one sentence is usually enough; two or three short sentences is fine for files that do several distinct things). No code words like \"function\"/\"component\"/\"config\". Explain to a non-coder. Do NOT start a side quest — only update the description if your edit actually changed what the file is for.")
+      additionalContext: (
+        "Constellation: you just changed `\($path)`.\n\n" +
+        "1. Description. \($desc_status) Tone: as short as it can be while still being clear (one sentence is usually enough; two or three short sentences is fine for files that do several distinct things). No code words like \"function\"/\"component\"/\"config\". Explain to a non-coder. Do NOT start a side quest — only update the description if your edit actually changed what the file is for.\n\n" +
+        "2. Learning. If this edit revealed something non-obvious worth remembering — a hidden constraint, a foot-gun, a reusable pattern, a wrong-then-right judgment call — append a tiny entry to .constellation/learnings.json under the key `\($path)` (or `_general` if it spans multiple files). Shape: {date, pr, insight}. Use today as the ISO date; pr can be null if no PR exists yet. One sentence per insight. Lead with the insight, not the symptom (good: \"Conditional return null must sit after every useMemo, or hook order changes between renders.\" bad: \"We had a hook ordering bug.\"). Skip entirely if the edit was mechanical (typo, rename, dependency bump) — sparse-and-sharp beats comprehensive-and-noisy."
+      )
     }
   }' 2>/dev/null || exit 0

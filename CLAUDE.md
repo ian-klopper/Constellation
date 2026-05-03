@@ -29,6 +29,7 @@ There is no per-target `.constellation/` directory anymore. Helpers live in `lib
 
 As of the last update to this file:
 
+- **Project tracker.** `roadmap.json` at repo root is the project tracker — `right_now` (one sentence on what's in flight) + three goal tiers (`short_term`, `mid_term`, `long_term`) + `recently_shipped` + `known_issues` + `open_questions` + `anti_goals` + `parked_ideas`. Its shape is enforced by `roadmap.schema.json`; every edit to `roadmap.json` must validate against the schema. The schema uses `additionalProperties: false` everywhere, so do **not** invent new fields — if a new shape is genuinely needed, update `roadmap.schema.json` in the same commit. Move items from `short_term` → `recently_shipped` when they ship (set `shipped_at` and ideally `commit`). Prune `recently_shipped` items older than ~2 weeks; git log remembers.
 - **Stack:** Next.js 16 (App Router) + React 19 + TypeScript 5.7 + Tailwind v4 (PostCSS plugin).
 - **Runtime deps:** `ts-morph` (symbol extraction), `fast-glob` (file discovery), `zod` (lifecycle-file validation), `server-only` (guards server modules).
 - **Dev deps that matter:** `tsx` (runs the daemon entry without a build step in self-dev).

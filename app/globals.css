@@ -53,3 +53,19 @@ body {
 .tile-dim {
   opacity: 0.45;
 }
+
+/* Live edit-pulse: applied by TreemapNode whenever an active agent's
+   currentTool is Edit/Write/MultiEdit and currentPath matches this tile.
+   Stacks on top of any base hover/pin state — the amber outline + soft
+   pulsing glow read as "work happening here right now" without fighting
+   the bg-color tints that the .tile-input/.tile-output classes use. */
+@keyframes constellation-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(245 158 11 / 0); }
+  50%      { box-shadow: 0 0 0 4px rgb(245 158 11 / 0.35); }
+}
+.tile-editing {
+  outline: 1px solid rgb(245 158 11 / 0.65); /* amber-500 */
+  outline-offset: -1px;
+  animation: constellation-pulse 1.6s ease-in-out infinite;
+  z-index: 8;
+}

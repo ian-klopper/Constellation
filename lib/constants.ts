@@ -77,6 +77,18 @@ export const OVERLAY_MOTION = {
   BUBBLE_OPACITY_MS: 200,
 } as const;
 
+// Per-agent file-trail overlay. PATH_HISTORY_MAX is the server-side cap on
+// how many visited paths each agent carries in its snapshot — it's mirrored
+// in daemon/lifecycle.ts so the wire payload can't blow up over a long
+// session. FOSSIL_LIFETIME_MS is the post-stop window during which a
+// finished agent's trail keeps drawing while fading out.
+export const CONSTELLATION = {
+  STROKE_WIDTH: 1.5,
+  ALIVE_OPACITY: 0.85,
+  FOSSIL_LIFETIME_MS: 30_000,
+  PATH_HISTORY_MAX: 50,
+} as const;
+
 // Zoom + LOD constants for the cursor-anchored scroll-zoom + drag-pan
 // gesture surface owned by Visualizer. ZOOM.MIN is always 1 in the layout
 // space (canvas exactly fills the viewport at zoom=1), so the floor doesn't

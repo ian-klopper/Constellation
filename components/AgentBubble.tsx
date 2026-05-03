@@ -1,7 +1,9 @@
 /**
- * The thought-bubble above each agent icon — narrates whatever the
- * agent is currently doing (currentActivity), or its latest text
- * (currentMessage), or falls back to its subagent_type.
+ * The thought-bubble above each agent icon — surfaces the agent's
+ * latest reasoning (currentThought) when available, else its current
+ * action (currentActivity), else its latest text (currentMessage),
+ * else its description / subagent_type. Single line, but the line
+ * itself is the most interesting thing the agent has said recently.
  */
 "use client";
 
@@ -10,6 +12,7 @@ import type { ActiveAgent } from "@/lib/types";
 
 export function AgentBubble({ agent }: { agent: ActiveAgent }) {
   const text =
+    agent.currentThought?.trim() ||
     agent.currentActivity?.trim() ||
     agent.currentMessage?.trim() ||
     agent.description?.trim() ||
@@ -21,7 +24,7 @@ export function AgentBubble({ agent }: { agent: ActiveAgent }) {
         className="relative whitespace-nowrap rounded-sm border border-zinc-300 bg-white px-2 py-1 text-[11px] leading-none text-zinc-800 shadow-sm"
         style={{ transition: `opacity ${OVERLAY_MOTION.BUBBLE_OPACITY_MS}ms ease-out` }}
       >
-        <span className="block max-w-[28ch] truncate">{text}</span>
+        <span className="block max-w-[60ch] truncate">{text}</span>
         <span
           aria-hidden
           className="absolute left-1/2 top-full -translate-x-1/2"

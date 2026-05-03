@@ -5,5 +5,12 @@
       "pr": null,
       "insight": "Apostrophes inside a jq expression wrapped in bash single-quotes terminate the bash string. Contractions like \"today's\" silently break the hook. Avoid contractions in any `jq -nc '...'` block, or escape with `'\\''`."
     }
+  ],
+  "cli/describe.mjs": [
+    {
+      "date": "2026-05-03",
+      "pr": null,
+      "insight": "When a CLI needs to find a user-installed binary (claude, node managed by nvm/asdf, homebrew tools), spawning `$SHELL -lc 'command -v <bin>'` is the universal lookup — it sources the user's interactive dotfiles, so it finds anything their terminal would. Plain `which` from a launchd-spawned or Finder-spawned process misses every shell-managed PATH."
+    }
   ]
 }

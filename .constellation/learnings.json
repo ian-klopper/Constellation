@@ -1,0 +1,9 @@
+{
+  "_general": [
+    {
+      "date": "2026-05-03",
+      "pr": null,
+      "insight": "Apostrophes inside a jq expression wrapped in bash single-quotes terminate the bash string. Contractions like \"today's\" silently break the hook. Avoid contractions in any `jq -nc '...'` block, or escape with `'\\''`."
+    }
+  ]
+}

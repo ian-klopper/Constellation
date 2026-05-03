@@ -39,6 +39,7 @@ next-env.d.ts
 !.constellation/descriptions.json
 !.constellation/descriptions.yaml
 !.constellation/descriptions.yml
+!.constellation/learnings.json
 
 # Claude Code — keep user-local overrides out of the repo
 .claude/settings.local.json

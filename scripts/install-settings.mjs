@@ -19,23 +19,35 @@ import { createInterface } from "node:readline/promises";
 
 function parseArgs(argv) {
   const args = {};
-  for (let i = 0; i < argv.length; i += 2) {
+  for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
+    if (!key?.startsWith("--")) {
+      throw new Error(`Bad argument: ${key}`);
+    }
+    // Boolean flags (no value): --yes, -y. Everything else takes the
+    // next argv slot as its value.
+    if (key === "--yes" || key === "-y") {
+      args.yes = true;
+      continue;
+    }
     const value = argv[i + 1];
-    if (!key?.startsWith("--") || value === undefined) {
-      throw new Error(`Bad argument: ${key} ${value ?? ""}`);
+    if (value === undefined) {
+      throw new Error(`Bad argument: ${key} (missing value)`);
     }
     args[key.slice(2)] = value;
+    i++;
   }
   return args;
 }
 
-const { "install-root": installRoot, "target-root": targetRoot } = parseArgs(
-  process.argv.slice(2),
-);
+const {
+  "install-root": installRoot,
+  "target-root": targetRoot,
+  yes: nonInteractive = false,
+} = parseArgs(process.argv.slice(2));
 if (!installRoot || !targetRoot) {
   console.error(
-    "usage: install-settings.mjs --install-root <path> --target-root <path>",
+    "usage: install-settings.mjs --install-root <path> --target-root <path> [--yes]",
   );
   process.exit(64);
 }
@@ -274,19 +286,28 @@ if (skipped.length > 0) {
   );
 }
 
-if (!process.stdin.isTTY) {
-  console.error("");
-  console.error(
-    "Settings merge needs an interactive prompt; stdin is not a TTY. Re-run from a terminal.",
-  );
-  process.exit(2);
+// --yes (passed through from `constellation add --yes`) bypasses the
+// confirm — the caller has already taken responsibility. Otherwise we
+// require an interactive TTY: silently auto-applying a diff against
+// the user's settings.json would be a foot-gun for anyone running this
+// in CI or under a misconfigured agent harness.
+let approved = nonInteractive;
+if (!approved) {
+  if (!process.stdin.isTTY) {
+    console.error("");
+    console.error(
+      "Settings merge needs an interactive prompt; stdin is not a TTY. " +
+        "Re-run from a terminal, or pass --yes to apply non-interactively.",
+    );
+    process.exit(2);
+  }
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = (await rl.question("\nApply this diff? [y/N]: ")).trim();
+  rl.close();
+  approved = /^y(es)?$/i.test(answer);
 }
 
-const rl = createInterface({ input: process.stdin, output: process.stdout });
-const answer = (await rl.question("\nApply this diff? [y/N]: ")).trim();
-rl.close();
-
-if (!/^y(es)?$/i.test(answer)) {
+if (!approved) {
   console.log(
     "Settings unchanged. Re-run the installer when ready, or merge manually using the diff above.",
   );

@@ -14,6 +14,7 @@ import { TREEMAP } from "@/lib/constants";
 import { useHover } from "./HoverContext";
 import { useIsEditing } from "./EditingHighlightContext";
 import { useLod } from "./LodContext";
+import { useResolvedDescription } from "./LiveDescriptionsContext";
 import { useRegisterTile } from "./TileRegistry";
 import { useZoomPan } from "./ZoomPanContext";
 import type { TreeNode } from "@/lib/types";
@@ -228,7 +229,15 @@ function FileTile({
   const availableH =
     h - FILE_TILE_HEADER_HEIGHT - DESCRIPTION_PADDING_Y - ARTICLE_BORDER_Y;
   const lines = Math.floor(availableH / DESCRIPTION_LINE_HEIGHT);
-  const showDescription = lines >= 1 && Boolean(node.description);
+
+  // Live updates from `constellation describe` override server-rendered
+  // descriptions; popKey re-fires the fade-in animation each time the
+  // resolved description changes.
+  const { description, popKey } = useResolvedDescription(
+    node.path,
+    node.description,
+  );
+  const showDescription = lines >= 1 && Boolean(description);
 
   return (
     // ref => TileRegistry; data-path is kept as a redundant escape hatch
@@ -278,7 +287,8 @@ function FileTile({
       </header>
       {showDescription && (
         <p
-          className="px-2 py-1.5 text-[11px] leading-[14px] text-zinc-700"
+          key={popKey}
+          className="description-pop px-2 py-1.5 text-[11px] leading-[14px] text-zinc-700"
           style={{
             display: "-webkit-box",
             WebkitBoxOrient: "vertical",
@@ -286,7 +296,7 @@ function FileTile({
             overflow: "hidden",
           }}
         >
-          {node.description}
+          {description}
         </p>
       )}
     </article>

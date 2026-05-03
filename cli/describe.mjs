@@ -4,6 +4,13 @@
 // default (skip files already covered); pass --force to regenerate
 // everything.
 //
+// Streams Claude's output line-by-line and writes the sidecar
+// incrementally as each description arrives, so the visualizer can pop
+// tiles in live during onboarding instead of staring at a black-box
+// spinner. Each new description is also fired-and-forgotten at the
+// daemon's /event/description-update endpoint; the daemon fans it out
+// over SSE to any connected browser tab.
+//
 // Called directly by users and re-used by `cli/add.mjs` after a fresh
 // repo registration. Pass --yes to skip the interactive confirm (used
 // from `add`, which has already confirmed).
@@ -13,7 +20,7 @@ import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
-import { canonicalCwd } from "./util.mjs";
+import { canonicalCwd, postDaemonNoThrow } from "./util.mjs";
 
 const SIDECAR_PATH = ".constellation/descriptions.json";
 const TONE_PROMPT_PATH = "cli/description-tone.txt";
@@ -21,6 +28,12 @@ const COST_CAP_USD = 5;
 const ALLOWED_MODELS = new Set(["haiku", "sonnet", "opus"]);
 const DEFAULT_MODEL = "sonnet";
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+// Watchdogs around the spawned `claude --print` child. Override via
+// CONSTELLATION_DESCRIBE_TIMEOUT_MS / _IDLE_MS (test convenience).
+const DEFAULT_WALL_TIMEOUT_MS = 15 * 60 * 1000;
+const DEFAULT_IDLE_TIMEOUT_MS = 90 * 1000;
+const SIDECAR_DEBOUNCE_MS = 200;
 
 // Mirrors lib/scan/discover.ts:IGNORE. Kept simple — substring checks
 // instead of glob patterns. If something here drifts, the visible
@@ -145,18 +158,81 @@ export default async function describe({ installRoot, args }) {
   const tonePrompt = await loadTonePrompt(installRoot);
   const userPrompt = buildUserPrompt(todo);
 
-  const stopSpinner = startSpinner(
-    `Asking Claude (${flags.model}) to describe ${todo.length} ` +
-      `file${todo.length === 1 ? "" : "s"}`,
-  );
+  // Per-emit state — closed over by streaming callbacks below. `emitted`
+  // dedupes across whichever assistant-event format the Claude CLI is
+  // emitting (full snapshot per turn vs. incremental deltas), so the
+  // streaming pipeline is robust to either without us having to detect
+  // which mode we're in.
+  const emitted = new Set();
+  const accumulated = {};
+  let written = 0;
+  let writeTimer = null;
+  let writeInFlight = null;
+
+  const flushSidecar = async () => {
+    if (writeTimer) {
+      clearTimeout(writeTimer);
+      writeTimer = null;
+    }
+    if (writeInFlight) {
+      try { await writeInFlight; } catch { /* ignore prior failure */ }
+    }
+    const merged = { ...existing, ...accumulated };
+    writeInFlight = writeSidecar(target, merged);
+    try { await writeInFlight; } catch (err) {
+      console.error("");
+      console.error(`! sidecar write failed: ${err.message}`);
+    } finally {
+      writeInFlight = null;
+    }
+  };
+
+  const scheduleSidecarWrite = () => {
+    if (writeTimer) return;
+    writeTimer = setTimeout(() => {
+      writeTimer = null;
+      flushSidecar();
+    }, SIDECAR_DEBOUNCE_MS);
+  };
+
+  const onDescription = (filePath, description) => {
+    if (emitted.has(filePath)) return;
+    emitted.add(filePath);
+    accumulated[filePath] = description;
+    written++;
+    spinner.update(written);
+    scheduleSidecarWrite();
+    // Daemon down ⇒ silent no-op ⇒ describe still works (just no live UI).
+    postDaemonNoThrow(installRoot, "/event/description-update", {
+      cwd: target,
+      path: filePath,
+      description,
+    });
+  };
+
+  const spinner = startProgressSpinner(flags.model, todo.length);
   const result = await runClaude({
     cwd: target,
     bin: claudeBin,
     systemPrompt: tonePrompt,
     userPrompt,
     model: flags.model,
+    expected: new Set(todo),
+    onDescription,
   });
-  stopSpinner();
+  spinner.stop();
+
+  // Final flush so anything buffered behind the debounce lands.
+  await flushSidecar();
+
+  if (result.killed) {
+    console.error(
+      `Claude --print was killed (${result.killed} timeout). ` +
+        `Last stderr:\n${(result.stderr || "(empty)").trimEnd()}`,
+    );
+    return 124;
+  }
+
   if (result.code !== 0) {
     console.error(`Claude exited with code ${result.code}.`);
     if (result.stderr) {
@@ -165,19 +241,32 @@ export default async function describe({ installRoot, args }) {
     return result.code || 1;
   }
 
-  const descriptions = parseDescriptionMap(result.stdout, todo);
-  if (!descriptions) {
+  // End-of-run fallback: if streaming missed entries (e.g. Claude wrote
+  // the whole batch on one line that arrived after our newline scan
+  // already buffered it, or wrapped it in a code fence), recover from
+  // the final result text the same way the old non-streaming path did.
+  const fallback = parseDescriptionMap(result.fullText, todo);
+  if (fallback) {
+    let recovered = 0;
+    for (const [k, v] of Object.entries(fallback)) {
+      if (!emitted.has(k)) {
+        onDescription(k, v);
+        recovered++;
+      }
+    }
+    if (recovered > 0) {
+      await flushSidecar();
+    }
+  }
+
+  if (written === 0) {
     console.error(
-      "Couldn't parse descriptions out of Claude's response. " +
+      "Couldn't parse any descriptions out of Claude's response. " +
         "Re-run with --force to retry.",
     );
     return 1;
   }
 
-  const merged = { ...existing, ...descriptions };
-  await writeSidecar(target, merged);
-
-  const written = Object.keys(descriptions).length;
   console.log("");
   console.log(
     `✓ Wrote ${written} description${written === 1 ? "" : "s"} to ` +
@@ -261,29 +350,52 @@ async function pickModelAndConfirm(defaultModel) {
   }
 }
 
-// Lightweight spinner on stderr so the user knows the long claude run
-// hasn't hung. Returns a stop fn that clears the line. No-op when stderr
-// isn't a TTY (CI, piped output) so logs stay clean.
-function startSpinner(label) {
+// Live counter spinner — much more useful than the old elapsed-time
+// label because the user can see how far through the batch Claude is.
+// Falls back to a single newline + periodic count line on non-TTY
+// stderr so CI logs stay clean.
+function startProgressSpinner(model, total) {
+  let count = 0;
   if (!process.stderr.isTTY) {
-    process.stderr.write(`${label}...\n`);
-    return () => {};
+    process.stderr.write(
+      `Describing ${total} file${total === 1 ? "" : "s"} with ${model}...\n`,
+    );
+    return {
+      update(n) {
+        count = n;
+        if (n === total || n % 10 === 0) {
+          process.stderr.write(`  ...${n}/${total}\n`);
+        }
+      },
+      stop() {
+        if (count !== total) {
+          process.stderr.write(`  ...${count}/${total} (final)\n`);
+        }
+      },
+    };
   }
   let i = 0;
-  const start = Date.now();
   const tick = () => {
-    const elapsed = Math.floor((Date.now() - start) / 1000);
-    const m = Math.floor(elapsed / 60);
-    const s = elapsed % 60;
-    const time = m > 0 ? `${m}m${String(s).padStart(2, "0")}s` : `${s}s`;
     const frame = SPINNER_FRAMES[i++ % SPINNER_FRAMES.length];
-    process.stderr.write(`\r\x1b[K${frame} ${label}... ${time}`);
+    process.stderr.write(
+      `\r\x1b[K${frame} Describing files with ${model}... (${count}/${total})`,
+    );
   };
   tick();
   const id = setInterval(tick, 100);
-  return () => {
-    clearInterval(id);
-    process.stderr.write("\r\x1b[K");
+  return {
+    update(n) {
+      count = n;
+      tick();
+    },
+    stop() {
+      clearInterval(id);
+      process.stderr.write("\r\x1b[K");
+    },
+    clearLine() {
+      if (process.stderr.isTTY) process.stderr.write("\r\x1b[K");
+    },
+    redraw: tick,
   };
 }
 
@@ -453,97 +565,223 @@ function buildUserPrompt(paths) {
     "Files (repo-relative paths):",
     ...paths.map((p) => `- ${p}`),
     "",
-    "Respond with a single JSON object on stdout, nothing else — no prose,",
-    "no code fences, no comments. The object's keys are the exact paths",
-    "above; the values are one-sentence plain-English descriptions.",
+    "Output format: respond with one JSON object per line on stdout — JSONL.",
+    "No prose, no code fences, no surrounding array, no comments. Each line",
+    "must be exactly:",
     "",
-    "Example shape:",
-    "{",
-    '  "bin/constellation": "This is what runs when you type \'constellation\' in your terminal — it figures out which job you asked for and hands it off.",',
-    '  "package.json": "This is the project\'s name tag and shopping list — it says what this project is called and what other projects it relies on."',
-    "}",
+    '{"path": "<one of the paths above>", "description": "<one-sentence plain-English description>"}',
+    "",
+    "Cover every path exactly once. Emit each line as soon as that file's",
+    "description is ready — do not buffer the whole batch before writing.",
+    "",
+    "Example:",
+    '{"path": "bin/constellation", "description": "This is what runs when you type \'constellation\' in your terminal — it figures out which job you asked for and hands it off."}',
+    '{"path": "package.json", "description": "This is the project\'s name tag and shopping list — it says what this project is called and what other projects it relies on."}',
   ].join("\n");
 }
 
-async function runClaude({ cwd, bin, systemPrompt, userPrompt, model }) {
-  return await new Promise((resolve) => {
-    // The user prompt for a large repo (one bullet per file) easily runs
-    // into hundreds of KB. macOS's ARG_MAX is ~256 KB, so passing it as
-    // the trailing positional argument blows up at spawn time with
-    // E2BIG before claude ever runs. Pipe it through stdin instead;
-    // `claude --print` reads stdin when no positional prompt is given.
+// Spawns `claude --print --output-format stream-json --verbose`, parses
+// the NDJSON envelopes line-by-line as they stream in, accumulates the
+// model's text, and emits {path, description} pairs the moment a
+// complete JSONL line lands. Two watchdogs bound the child:
+//   - idle: if no stdout chunk arrives for IDLE_TIMEOUT_MS, kill it
+//     (the husband's "stuck" experience came from no visibility);
+//   - wall: a hard ceiling so a runaway prompt can't burn budget forever.
+function runClaude({
+  cwd, bin, systemPrompt, userPrompt, model, expected, onDescription,
+}) {
+  return new Promise((resolve) => {
+    const wallMs = Number(process.env.CONSTELLATION_DESCRIBE_TIMEOUT_MS) || DEFAULT_WALL_TIMEOUT_MS;
+    const idleMs = Number(process.env.CONSTELLATION_DESCRIBE_IDLE_MS) || DEFAULT_IDLE_TIMEOUT_MS;
+
     const args = [
       "--print",
       "--system-prompt", systemPrompt,
       "--allowed-tools", "Glob,Read",
       "--permission-mode", "dontAsk",
-      "--output-format", "json",
+      "--output-format", "stream-json",
+      "--verbose",  // required by Claude CLI when stream-json is used
       "--no-session-persistence",
       "--max-budget-usd", String(COST_CAP_USD),
       "--model", model,
     ];
-    // Capture stderr instead of inheriting so claude's output doesn't
-    // collide with our spinner; print it after the run if non-empty.
+
     const proc = spawn(bin, args, {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
     });
-    let stdout = "";
+
+    let envelopeBuf = "";   // raw stdout, split on \n into Claude CLI envelopes
+    let modelText = "";     // accumulated assistant text, split on \n into JSONL entries
+    let fullText = "";      // unsplit assistant text — kept around for the end-of-run fallback parser
     let stderr = "";
-    proc.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
-    proc.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
-    proc.on("error", (err) => {
-      console.error(`Failed to spawn claude: ${err.message}`);
-      resolve({ code: 1, stdout: "", stderr: "" });
+    let killed = null;       // "idle" | "wall" | "error" | null
+    let lastStdoutAt = Date.now();
+
+    const idleTimer = setInterval(() => {
+      if (Date.now() - lastStdoutAt > idleMs) {
+        killed = "idle";
+        try { proc.kill("SIGTERM"); } catch { /* already dead */ }
+        setTimeout(() => { try { proc.kill("SIGKILL"); } catch { /* */ } }, 5000);
+        clearInterval(idleTimer);
+      }
+    }, 5000);
+
+    const wallTimer = setTimeout(() => {
+      killed = "wall";
+      try { proc.kill("SIGTERM"); } catch { /* */ }
+      setTimeout(() => { try { proc.kill("SIGKILL"); } catch { /* */ } }, 5000);
+    }, wallMs);
+
+    const handleEnvelope = (line) => {
+      if (!line.trim()) return;
+      let env;
+      try { env = JSON.parse(line); } catch { return; }
+      collectAssistantText(env, (text) => appendModelText(text));
+    };
+
+    const appendModelText = (text) => {
+      modelText += text;
+      fullText += text;
+      let nl;
+      while ((nl = modelText.indexOf("\n")) !== -1) {
+        const candidate = modelText.slice(0, nl);
+        modelText = modelText.slice(nl + 1);
+        tryEmitJsonlEntry(candidate, expected, onDescription);
+      }
+    };
+
+    proc.stdout.on("data", (chunk) => {
+      lastStdoutAt = Date.now();
+      envelopeBuf += chunk.toString();
+      let nl;
+      while ((nl = envelopeBuf.indexOf("\n")) !== -1) {
+        const line = envelopeBuf.slice(0, nl);
+        envelopeBuf = envelopeBuf.slice(nl + 1);
+        handleEnvelope(line);
+      }
     });
-    proc.on("exit", (code) => resolve({ code: code ?? 1, stdout, stderr }));
+
+    proc.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+      // Surface stderr in real time so the husband-machine "stuck"
+      // experience can't recur silently. Clear the spinner line first
+      // so the chunks don't garble the live counter.
+      if (process.stderr.isTTY) process.stderr.write("\r\x1b[K");
+      process.stderr.write(chunk);
+      if (process.stderr.isTTY) process.stderr.write("\n");
+    });
+
+    proc.on("error", (err) => {
+      killed = "error";
+      console.error(`Failed to spawn claude: ${err.message}`);
+      clearInterval(idleTimer);
+      clearTimeout(wallTimer);
+      resolve({ code: 1, stderr: err.message, fullText: "", killed });
+    });
+
+    proc.on("exit", (code) => {
+      clearInterval(idleTimer);
+      clearTimeout(wallTimer);
+      // Drain any final partial line that didn't end in \n.
+      if (envelopeBuf.trim()) handleEnvelope(envelopeBuf);
+      if (modelText.trim()) tryEmitJsonlEntry(modelText, expected, onDescription);
+      resolve({
+        code: code ?? 1,
+        stderr,
+        fullText,
+        killed,
+      });
+    });
+
     proc.stdin.on("error", () => {});
     proc.stdin.end(userPrompt);
   });
 }
 
-// Claude's --output-format json wraps the model's text. Shape depends on
-// whether tools were used:
-//   - No tool use: a single { "type": "result", "result": "<text>", ... }
-//   - With tool use: an array of turn events, last one is the result.
-// Extract the result string and parse it as a JSON map.
-function parseDescriptionMap(stdout, expectedPaths) {
-  let envelope;
-  try {
-    envelope = JSON.parse(stdout);
-  } catch {
-    return null;
+// Pull text content out of a Claude CLI envelope. Handles both shapes
+// the CLI emits in stream-json mode: an `assistant` event whose
+// `message.content[]` carries text blocks, and the final `result` event
+// with `result: <full text>`. Re-processing identical text is fine —
+// the dedup happens at the emit layer (per-path Set), not here.
+function collectAssistantText(env, sink) {
+  if (!env || typeof env !== "object") return;
+  if (env.type === "assistant" && env.message && Array.isArray(env.message.content)) {
+    for (const block of env.message.content) {
+      if (block && block.type === "text" && typeof block.text === "string") {
+        sink(block.text);
+      }
+    }
+    return;
   }
-  const result = Array.isArray(envelope)
-    ? envelope.findLast?.((e) => e?.type === "result") ??
-      [...envelope].reverse().find((e) => e?.type === "result")
-    : envelope;
-  const text = typeof result?.result === "string" ? result.result : null;
+  if (env.type === "result" && typeof env.result === "string") {
+    sink(env.result);
+  }
+}
+
+function tryEmitJsonlEntry(line, expected, onDescription) {
+  const t = line.trim();
+  if (!t) return;
+  // Strip an optional trailing comma in case Claude slips into JSON-array
+  // mode despite the prompt. Don't try to handle wider deviations here —
+  // the end-of-run fallback parser catches the "wrote one big object"
+  // case via parseDescriptionMap.
+  const stripped = t.replace(/,\s*$/, "");
+  if (!stripped.startsWith("{") || !stripped.endsWith("}")) return;
+  let obj;
+  try { obj = JSON.parse(stripped); } catch { return; }
+  if (!obj || typeof obj.path !== "string" || typeof obj.description !== "string") return;
+  if (!expected.has(obj.path)) return;
+  onDescription(obj.path, obj.description.trim());
+}
+
+// Fallback parser for the end-of-run text. The streaming path is the
+// happy path; this catches the case where Claude wrote the whole
+// response as a single JSON object (the old --output-format json shape)
+// or wrapped JSONL in a code fence so our newline scanner skipped past
+// the JSON. Returns a {path: description} map or null.
+function parseDescriptionMap(text, expectedPaths) {
   if (!text) return null;
-
-  // The model might wrap in code fences despite our instructions. Strip them.
   const cleaned = stripCodeFence(text.trim());
-
-  let parsed;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    return null;
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  if (!cleaned) return null;
 
   const expected = new Set(expectedPaths);
+
+  // First try: parse as a single JSON object.
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const out = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v !== "string") continue;
+        if (!expected.has(k)) continue;
+        out[k] = v.trim();
+      }
+      if (Object.keys(out).length > 0) return out;
+    }
+  } catch { /* fall through to JSONL retry */ }
+
+  // Second try: JSONL — handles the case where Claude correctly emitted
+  // one object per line but every chunk landed without a trailing \n
+  // until the final result event.
   const out = {};
-  for (const [k, v] of Object.entries(parsed)) {
-    if (typeof v !== "string") continue;
-    if (!expected.has(k)) continue;
-    out[k] = v.trim();
+  for (const raw of cleaned.split("\n")) {
+    const t = raw.trim().replace(/,\s*$/, "");
+    if (!t.startsWith("{")) continue;
+    try {
+      const obj = JSON.parse(t);
+      if (obj && typeof obj.path === "string" &&
+          typeof obj.description === "string" &&
+          expected.has(obj.path)) {
+        out[obj.path] = obj.description.trim();
+      }
+    } catch { /* ignore partial */ }
   }
-  return out;
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 function stripCodeFence(s) {
-  const fence = /^```(?:json)?\s*\n?([\s\S]*?)\n?```$/;
+  const fence = /^```(?:json|jsonl)?\s*\n?([\s\S]*?)\n?```$/;
   const m = s.match(fence);
   return m ? m[1] : s;
 }

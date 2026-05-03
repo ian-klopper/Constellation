@@ -10,9 +10,16 @@ import { copyFile, mkdir, readdir, chmod } from "node:fs/promises";
 import { existsSync, readFileSync, appendFileSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
-import { canonicalCwd, postDaemon } from "./util.mjs";
+import {
+  canonicalCwd,
+  loadConfig,
+  openInBrowser,
+  postDaemon,
+} from "./util.mjs";
 
 const HOOK_SUBDIR = ".claude/hooks/constellation";
+const ALLOWED_MODELS = new Set(["haiku", "sonnet", "opus"]);
+const DESCRIBE_PROMPT_TIMEOUT_MS = 30_000;
 
 export default async function add({ installRoot, args }) {
   const target = canonicalCwd();
@@ -24,14 +31,20 @@ export default async function add({ installRoot, args }) {
     return 1;
   }
 
-  const noDescribe = args.includes("--no-describe");
+  let flags;
+  try {
+    flags = parseFlags(args);
+  } catch (err) {
+    console.error(err.message);
+    return 64;
+  }
 
   console.log(`Adding ${target} to Constellation...`);
   console.log("");
 
   await copyHooks(installRoot, target);
   appendGitignore(target);
-  const settingsCode = await runSettingsMerge(installRoot, target);
+  const settingsCode = await runSettingsMerge(installRoot, target, flags);
   if (settingsCode !== 0) {
     console.error(
       "Settings merge declined or failed. Hooks are copied; re-run when ready.",
@@ -57,20 +70,79 @@ export default async function add({ installRoot, args }) {
     );
   }
 
-  if (!noDescribe) {
-    await maybeRunDescribe(installRoot);
+  const dashboardUrl = buildDashboardUrl(installRoot, target);
+
+  if (!flags.noDescribe) {
+    await maybeRunDescribe({ installRoot, target, flags, dashboardUrl });
   }
 
   console.log("");
-  console.log(
-    "Done. Open http://localhost:47318/?repo=" +
-      encodeURIComponent(target) +
-      " to view.",
-  );
+  if (interactive(flags)) {
+    console.log(`Opening dashboard: ${dashboardUrl}`);
+    openInBrowser(dashboardUrl);
+  } else {
+    console.log(`Done. Open ${dashboardUrl} to view.`);
+  }
   return 0;
 }
 
-async function maybeRunDescribe(installRoot) {
+function parseFlags(args) {
+  const flags = {
+    noDescribe: false,
+    yes: false,
+    model: null,
+    modelExplicit: false,
+  };
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--no-describe") flags.noDescribe = true;
+    else if (a === "--yes" || a === "-y") flags.yes = true;
+    else if (a === "--model" || a === "-m") {
+      const v = args[++i];
+      if (!v || !ALLOWED_MODELS.has(v)) {
+        throw new Error(
+          `--model must be one of: ${[...ALLOWED_MODELS].join(", ")} ` +
+            `(got ${JSON.stringify(v ?? "")}).`,
+        );
+      }
+      flags.model = v;
+      flags.modelExplicit = true;
+    } else if (a.startsWith("--model=")) {
+      const v = a.slice("--model=".length);
+      if (!ALLOWED_MODELS.has(v)) {
+        throw new Error(
+          `--model must be one of: ${[...ALLOWED_MODELS].join(", ")} ` +
+            `(got ${JSON.stringify(v)}).`,
+        );
+      }
+      flags.model = v;
+      flags.modelExplicit = true;
+    }
+  }
+  return flags;
+}
+
+// "Interactive" means we should prompt humans and auto-open browsers.
+// Three things make a run non-interactive:
+//   1. --yes was passed (caller has already decided everything).
+//   2. CLAUDECODE=1 — we're being driven by a Claude Code agent's Bash
+//      tool. The agent has no way to type at a prompt or see a browser
+//      tab, and Claude Code wraps Bash in a pty so process.stdin.isTTY
+//      lies. CLAUDECODE is the documented escape hatch.
+//   3. stdin is not a TTY (CI, piped input, the install.sh handoff).
+function interactive(flags) {
+  if (flags.yes) return false;
+  if (process.env.CLAUDECODE === "1") return false;
+  if (!process.stdin.isTTY) return false;
+  return true;
+}
+
+function buildDashboardUrl(installRoot, target) {
+  const config = loadConfig(installRoot);
+  return `http://localhost:${config.web.port}/?repo=${encodeURIComponent(target)}`;
+}
+
+async function maybeRunDescribe({ installRoot, target, flags, dashboardUrl }) {
   console.log("");
   console.log(
     "Constellation can generate plain-English, one-sentence descriptions",
@@ -80,24 +152,51 @@ async function maybeRunDescribe(installRoot) {
   );
   console.log("on the visualizer just show their filename.");
   console.log("");
-  if (!process.stdin.isTTY) {
+
+  // Non-interactive paths: either skip with a hint, or run with --yes.
+  if (!interactive(flags)) {
+    if (flags.yes) {
+      announceDashboardBeforeDescribe(dashboardUrl);
+      const describeArgs = ["describe", "--yes"];
+      if (flags.modelExplicit) describeArgs.push("--model", flags.model);
+      const describe = await import("./describe.mjs");
+      const code = await describe.default({ installRoot, args: describeArgs });
+      if (code !== 0) {
+        console.log("");
+        console.log(
+          "Descriptions weren't generated. Re-run `constellation describe` " +
+            "from this repo once the issue above is fixed.",
+        );
+      }
+      return;
+    }
     console.log(
-      "Skipping description generation (stdin is not a TTY). Run " +
-        "`constellation describe` later to generate them.",
+      "Skipping description generation (running non-interactively). Run " +
+        "`constellation describe` later, or pass --yes to generate now.",
     );
     return;
   }
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = (await rl.question(
+
+  const answer = await promptYesNoWithTimeout(
     "Generate descriptions now? [Y/n]: ",
-  )).trim();
-  rl.close();
+    DESCRIBE_PROMPT_TIMEOUT_MS,
+  );
+  if (answer === "timeout") {
+    console.log("");
+    console.log(
+      "No answer in 30s — skipping. Run `constellation describe` whenever " +
+        "you want them.",
+    );
+    return;
+  }
   if (answer !== "" && !/^y(es)?$/i.test(answer)) {
     console.log(
       "Skipped. Run `constellation describe` whenever you want them.",
     );
     return;
   }
+
+  announceDashboardBeforeDescribe(dashboardUrl);
   // Don't pass --yes here — let describe show its own model picker so
   // the user can choose haiku/sonnet/opus as part of this flow.
   const describe = await import("./describe.mjs");
@@ -108,6 +207,40 @@ async function maybeRunDescribe(installRoot) {
       "Descriptions weren't generated. Re-run `constellation describe` " +
         "from this repo once the issue above is fixed.",
     );
+  }
+}
+
+// Print the dashboard URL and open it before the long describe run, so
+// the user can watch descriptions pop in live instead of staring at a
+// black-box spinner.
+function announceDashboardBeforeDescribe(dashboardUrl) {
+  console.log("");
+  console.log(`Opening dashboard: ${dashboardUrl}`);
+  console.log(
+    "Descriptions will fill in live as Claude works — keep this tab open.",
+  );
+  console.log("");
+  openInBrowser(dashboardUrl);
+}
+
+// readline.question with a wall-clock timeout. If the user (or, more
+// likely, an unfortunate caller in a half-pty context where isTTY lies)
+// doesn't answer within timeoutMs, resolve with the sentinel "timeout"
+// so the caller can default-skip instead of hanging forever.
+async function promptYesNoWithTimeout(question, timeoutMs) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  let timer;
+  try {
+    const answer = await Promise.race([
+      rl.question(question).then((s) => s.trim()),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve("timeout"), timeoutMs);
+      }),
+    ]);
+    return answer;
+  } finally {
+    if (timer) clearTimeout(timer);
+    rl.close();
   }
 }
 
@@ -173,19 +306,19 @@ function appendGitignore(target) {
   }
 }
 
-function runSettingsMerge(installRoot, target) {
+function runSettingsMerge(installRoot, target, flags) {
+  const args = [
+    path.join(installRoot, "scripts/install-settings.mjs"),
+    "--install-root",
+    installRoot,
+    "--target-root",
+    target,
+  ];
+  // Pass --yes through so the agent-safe path of `constellation add
+  // --yes` doesn't dead-end at the settings merger's own y/N prompt.
+  if (flags.yes) args.push("--yes");
   return new Promise((resolve) => {
-    const proc = spawn(
-      "node",
-      [
-        path.join(installRoot, "scripts/install-settings.mjs"),
-        "--install-root",
-        installRoot,
-        "--target-root",
-        target,
-      ],
-      { stdio: "inherit" },
-    );
+    const proc = spawn("node", args, { stdio: "inherit" });
     proc.on("exit", (code) => resolve(code ?? 1));
   });
 }

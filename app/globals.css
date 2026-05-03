@@ -54,6 +54,30 @@ body {
   opacity: 0.45;
 }
 
+/* Pop-in animation for descriptions that arrive live from the SSE stream
+   during `constellation describe`. The element is mounted with key=popKey
+   in TreemapNode and HoverPanel, so each new description value remounts
+   the <p> and re-fires the fade. Subtle by design — 250ms is long enough
+   to read as "data filling in" without making fast batches feel jittery. */
+@keyframes description-pop {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.description-pop {
+  animation: description-pop 250ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .description-pop {
+    animation: none;
+  }
+}
+
 /* Live edit-pulse: applied by TreemapNode whenever an active agent's
    currentTool is Edit/Write/MultiEdit and currentPath matches this tile.
    Stacks on top of any base hover/pin state — the amber outline + soft

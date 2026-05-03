@@ -20,10 +20,16 @@ import {
   type AgentsPayload,
   type RepoSummary,
 } from "../lib/types";
+import { CONSTELLATION } from "../lib/constants";
 import type { DiskSync } from "./disk-sync";
 import type { SseBroker } from "./sse";
 import type { RepoRegistry } from "./registry";
 import { formatActivity, type ToolInput } from "./activity";
+
+// Tool names that count as "the agent is editing this file" for the
+// frontend's tile-pulse and lastEditAt timestamp. Read-only tools
+// (Read, Grep, Glob, Bash) intentionally don't trigger a pulse.
+const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit"]);
 
 export type LifecycleEvent =
   | {
@@ -344,6 +350,7 @@ export class Lifecycle {
         cwd: e.cwd,
         activity,
         filePath,
+        toolName: e.tool_name,
         transcriptPath: e.transcript_path,
       });
       return;
@@ -358,13 +365,21 @@ export class Lifecycle {
     }
     if (!agent) return;
 
+    const now = nowSeconds();
     const updated: ActiveAgent = {
       ...agent,
       status: "active",
-      lastActiveAt: nowSeconds(),
+      lastActiveAt: now,
     };
     if (activity) updated.currentActivity = activity;
     if (filePath) updated.currentPath = filePath;
+    if (e.tool_name) updated.currentTool = e.tool_name;
+    if (filePath) {
+      updated.pathHistory = appendPathHistory(agent.pathHistory, filePath, now);
+    }
+    if (e.tool_name && EDIT_TOOLS.has(e.tool_name)) {
+      updated.lastEditAt = now;
+    }
 
     this.agents.set(keyFor(updated.sessionId, updated.id), updated);
     this.disk.scheduleWrite(updated);
@@ -375,6 +390,7 @@ export class Lifecycle {
     cwd: string;
     activity: string;
     filePath: string;
+    toolName?: string;
     transcriptPath?: string;
   }): void {
     const now = nowSeconds();
@@ -394,6 +410,13 @@ export class Lifecycle {
         };
     if (opts.activity) next.currentActivity = opts.activity;
     if (opts.filePath) next.currentPath = opts.filePath;
+    if (opts.toolName) next.currentTool = opts.toolName;
+    if (opts.filePath) {
+      next.pathHistory = appendPathHistory(existing?.pathHistory, opts.filePath, now);
+    }
+    if (opts.toolName && EDIT_TOOLS.has(opts.toolName)) {
+      next.lastEditAt = now;
+    }
 
     this.agents.set(key, next);
     this.disk.scheduleWrite(next);
@@ -520,4 +543,23 @@ function relativizePath(filePath: string, cwd: string | undefined): string {
     return filePath.slice(cwd.length + 1);
   }
   return filePath;
+}
+
+// Append a visited path to the trail. Skips consecutive duplicates so a
+// chatty Edit→Edit→Edit on the same file doesn't pad the history with
+// identical points (the trail's purpose is movement, not repetition).
+// Trims to CONSTELLATION.PATH_HISTORY_MAX entries, dropping the oldest.
+function appendPathHistory(
+  prev: ActiveAgent["pathHistory"],
+  path: string,
+  ts: number,
+): ActiveAgent["pathHistory"] {
+  const list = prev ? [...prev] : [];
+  const last = list[list.length - 1];
+  if (last && last.path === path) return list;
+  list.push({ path, ts });
+  if (list.length > CONSTELLATION.PATH_HISTORY_MAX) {
+    list.splice(0, list.length - CONSTELLATION.PATH_HISTORY_MAX);
+  }
+  return list;
 }

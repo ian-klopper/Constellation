@@ -70,6 +70,20 @@ export const ActiveAgentSchema = z.object({
   status: z.enum(["active", "idle"]).optional(),
   currentActivity: z.string().optional(),
   currentMessage: z.string().optional(),
+  // Latest assistant thinking/text — richer than currentActivity so the
+  // bubble can show the *why* not just the *what*.
+  currentThought: z.string().optional(),
+  // Last tool name (e.g. "Edit", "Read"). Lets the frontend decide which
+  // tools deserve an edit-pulse without parsing the activity string.
+  currentTool: z.string().optional(),
+  // Chronological list of files this agent has touched. Capped server-side
+  // at CONSTELLATION.PATH_HISTORY_MAX. Drives the trail overlay.
+  pathHistory: z
+    .array(z.object({ path: z.string(), ts: z.number() }))
+    .optional(),
+  // Epoch seconds of the most recent Edit/Write/MultiEdit. Reserved for
+  // future per-edit pulse triggers; the steady glow today reads currentTool.
+  lastEditAt: z.number().optional(),
 });
 
 export type ActiveAgent = z.infer<typeof ActiveAgentSchema>;

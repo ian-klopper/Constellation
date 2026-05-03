@@ -35,6 +35,8 @@ import {
 } from "./HoverContext";
 import { TileRegistryProvider } from "./TileRegistry";
 import { AgentOverlay } from "./AgentOverlay";
+import { ConstellationOverlay } from "./ConstellationOverlay";
+import { EditingHighlightProvider } from "./EditingHighlightContext";
 import { PinController } from "./PinController";
 import {
   ZoomPanContext,
@@ -462,50 +464,55 @@ export function Visualizer({
   return (
     <HoverContext.Provider value={hoverValue}>
       <TileRegistryProvider>
-        <ZoomPanContext.Provider value={zoomPanValue}>
-          {/*
-            Container holds the transformed wrapper *and* HoverPanel as
-            siblings. HoverPanel must be a sibling (not a descendant) of the
-            wrapper because position: fixed resolves against the nearest
-            transformed ancestor — wrapping it inside the wrapper would
-            interpret left/top in scaled coords.
-          */}
-          <div
-            ref={containerRef}
-            className="relative h-full w-full overflow-hidden"
-          >
+        <EditingHighlightProvider root={root}>
+          <ZoomPanContext.Provider value={zoomPanValue}>
+            {/*
+              Container holds the transformed wrapper *and* HoverPanel as
+              siblings. HoverPanel must be a sibling (not a descendant) of the
+              wrapper because position: fixed resolves against the nearest
+              transformed ancestor — wrapping it inside the wrapper would
+              interpret left/top in scaled coords.
+            */}
             <div
-              ref={wrapperRef}
-              style={{
-                transformOrigin: "0 0",
-                width: size?.w ?? 0,
-                height: size?.h ?? 0,
-                position: "relative",
-              }}
+              ref={containerRef}
+              className="relative h-full w-full overflow-hidden"
             >
-              {size && size.w > 0 && size.h > 0 && (
-                <TreemapNode
-                  node={tree.tree}
-                  x={0}
-                  y={0}
-                  w={size.w}
-                  h={size.h}
-                  depth={0}
-                  tint={null}
-                />
-              )}
+              <div
+                ref={wrapperRef}
+                style={{
+                  transformOrigin: "0 0",
+                  width: size?.w ?? 0,
+                  height: size?.h ?? 0,
+                  position: "relative",
+                }}
+              >
+                {size && size.w > 0 && size.h > 0 && (
+                  <TreemapNode
+                    node={tree.tree}
+                    x={0}
+                    y={0}
+                    w={size.w}
+                    h={size.h}
+                    depth={0}
+                    tint={null}
+                  />
+                )}
+              </div>
+              <HoverPanel
+                file={activeFile}
+                mousePos={mousePos}
+                pinned={pinnedPath !== null}
+                pinnedPos={pinnedPos}
+                onClose={() => setPinned(null)}
+              />
             </div>
-            <HoverPanel
-              file={activeFile}
-              mousePos={mousePos}
-              pinned={pinnedPath !== null}
-              pinnedPos={pinnedPos}
-              onClose={() => setPinned(null)}
-            />
-          </div>
-          <AgentOverlay root={root} />
-          <PinController />
-        </ZoomPanContext.Provider>
+            {/* Constellation paints first (z-40) so AgentOverlay icons
+                (z-50) sit on top of the trail endpoints. */}
+            <ConstellationOverlay root={root} />
+            <AgentOverlay root={root} />
+            <PinController />
+          </ZoomPanContext.Provider>
+        </EditingHighlightProvider>
       </TileRegistryProvider>
     </HoverContext.Provider>
   );

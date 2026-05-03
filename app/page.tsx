@@ -15,6 +15,7 @@ import { LiveDescriptionsBridge } from "@/components/LiveDescriptionsContext";
 import { RoadmapToggle } from "@/components/RoadmapToggle";
 import { fetchRepos } from "@/lib/daemon-client";
 import { readRoadmap } from "@/lib/roadmap";
+import { listWorktrees } from "@/lib/worktrees";
 import type { RepoSummary } from "@/lib/types";
 
 type SearchParams = Promise<{ repo?: string | string[] }>;
@@ -34,7 +35,8 @@ export default async function HomePage({
     readRoadmap(root),
   ]);
   const stats = countTree(tree.tree);
-  const repos = mergeRepos(root, daemonRepos);
+  const worktreePaths = listWorktrees(root);
+  const repos = mergeRepos(root, daemonRepos, worktreePaths);
 
   return (
     <main className="flex h-screen flex-col">
@@ -74,21 +76,18 @@ function resolveRequestedRoot(
 // The viewing repo always shows up first in the switcher even if the
 // daemon doesn't yet know about it — that's the empty-state path
 // (no active sessions ⇒ daemon returns []), and we still want the
-// top-left to render the current repo's name.
+// top-left to render the current repo's name. Worktrees of the
+// viewing repo are folded in too so the user can arrow into idle
+// scratch branches the daemon has never seen.
 function mergeRepos(
   current: string,
   daemonRepos: RepoSummary[],
+  worktreePaths: string[],
 ): RepoSummary[] {
   const out: RepoSummary[] = [];
   const seen = new Set<string>();
   if (!daemonRepos.some((r) => r.repoPath === current)) {
-    out.push({
-      repoPath: current,
-      repoName: path.basename(current) || current,
-      sessionCount: 0,
-      agentCount: 0,
-      lastActiveAt: 0,
-    });
+    out.push(stubRepo(current));
     seen.add(current);
   }
   for (const r of daemonRepos) {
@@ -96,5 +95,20 @@ function mergeRepos(
     out.push(r);
     seen.add(r.repoPath);
   }
+  for (const p of worktreePaths) {
+    if (seen.has(p)) continue;
+    out.push(stubRepo(p));
+    seen.add(p);
+  }
   return out;
+}
+
+function stubRepo(p: string): RepoSummary {
+  return {
+    repoPath: p,
+    repoName: path.basename(p) || p,
+    sessionCount: 0,
+    agentCount: 0,
+    lastActiveAt: 0,
+  };
 }

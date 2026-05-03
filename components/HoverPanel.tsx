@@ -14,6 +14,7 @@
 import { useEffect, useRef } from "react";
 import { SymbolRow } from "./SymbolRow";
 import { useHover, type Pos } from "./HoverContext";
+import { useResolvedDescription } from "./LiveDescriptionsContext";
 import { HOVER_PANEL } from "@/lib/constants";
 import type { FileNode } from "@/lib/types";
 
@@ -43,6 +44,10 @@ export function HoverPanel({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { panelHoveredRef } = useHover();
+  const { description, popKey } = useResolvedDescription(
+    file?.path ?? "",
+    file?.description,
+  );
 
   // Reset scrollTop on file change without remounting the panel. A keyed
   // remount (key={file.path}) would destroy the DOM element on every hover
@@ -138,8 +143,13 @@ export function HoverPanel({
         {file.name}
       </div>
 
-      {file.description && (
-        <p className="mb-3 leading-snug text-zinc-700">{file.description}</p>
+      {description && (
+        <p
+          key={popKey}
+          className="description-pop mb-3 leading-snug text-zinc-700"
+        >
+          {description}
+        </p>
       )}
 
       {file.symbols.length > 0 && (

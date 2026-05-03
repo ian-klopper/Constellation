@@ -1,4 +1,5 @@
 // Shared helpers for the constellation CLI subcommands.
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import os from "node:os";
@@ -113,6 +114,39 @@ export async function getDaemon(installRoot, route, { timeoutMs = 1500 } = {}) {
 
 export function isAbsoluteRepo(p) {
   return typeof p === "string" && p.length > 0 && path.isAbsolute(p);
+}
+
+// Open a URL in the user's default browser. Detached + unref so the CLI
+// can exit immediately without leaving zombie children. Same platform
+// dispatch as `cli/open.mjs`; extracted so `add` can auto-open the
+// dashboard before the long describe run.
+export function openInBrowser(url) {
+  const cmd =
+    process.platform === "darwin"
+      ? "open"
+      : process.platform === "win32"
+        ? "start"
+        : "xdg-open";
+  const proc = spawn(cmd, [url], { stdio: "ignore", detached: true });
+  proc.unref();
+}
+
+// Fire-and-forget POST to the daemon. Silent on connection refused so
+// the caller still works when the daemon is down — same invariant the
+// hook shims rely on. Returns nothing; failures are swallowed.
+export async function postDaemonNoThrow(installRoot, route, body, { timeoutMs = 500 } = {}) {
+  try {
+    const config = loadConfig(installRoot);
+    const url = `http://127.0.0.1:${config.daemon.port}${route}`;
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch {
+    // Daemon down or slow — describe still works, just no live updates.
+  }
 }
 
 export function relTime(unixSeconds) {

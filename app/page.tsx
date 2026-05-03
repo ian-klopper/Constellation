@@ -11,6 +11,7 @@ import { scanProject, countTree } from "@/lib/scan";
 import { Visualizer } from "@/components/Visualizer";
 import { RepoSwitcher } from "@/components/RepoSwitcher";
 import { DetailSlider } from "@/components/DetailSlider";
+import { LiveDescriptionsBridge } from "@/components/LiveDescriptionsContext";
 import { fetchRepos } from "@/lib/daemon-client";
 import type { RepoSummary } from "@/lib/types";
 
@@ -44,7 +45,9 @@ export default async function HomePage({
         </div>
       </header>
       <div className="min-h-0 flex-1">
-        <Visualizer tree={tree} root={root} />
+        <LiveDescriptionsBridge root={root}>
+          <Visualizer tree={tree} root={root} />
+        </LiveDescriptionsBridge>
       </div>
     </main>
   );

@@ -21,7 +21,7 @@ import { userPidPath, userStateDir } from "../lib/user-dirs";
 import { Lifecycle } from "./lifecycle";
 import { TranscriptWatcher } from "./transcripts";
 import { DiskSync } from "./disk-sync";
-import { SseBroker } from "./sse";
+import { DescriptionsBroker, SseBroker } from "./sse";
 import { startServer } from "./server";
 import { RepoRegistry } from "./registry";
 import { clearAgentFiles } from "./atomic-write";
@@ -39,6 +39,7 @@ async function main() {
   await fs.writeFile(pidFile, String(process.pid), "utf8");
 
   const sse = new SseBroker();
+  const descriptions = new DescriptionsBroker();
   const disk = new DiskSync(stateDir);
   const registry = new RepoRegistry();
   await registry.load();
@@ -53,7 +54,7 @@ async function main() {
 
   await lifecycle.loadFromDisk(stateDir);
 
-  const server = startServer(config.daemon.port, lifecycle, sse, registry);
+  const server = startServer(config.daemon.port, lifecycle, sse, registry, descriptions);
 
   console.log(
     `[daemon] listening on 127.0.0.1:${config.daemon.port}, stateDir=${stateDir}`,
@@ -68,6 +69,7 @@ async function main() {
     await disk.flushAll();
     await registry.flush();
     sse.close();
+    descriptions.close();
     server.close();
     await fs.rm(pidFile, { force: true });
     process.exit(0);

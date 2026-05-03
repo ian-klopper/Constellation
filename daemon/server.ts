@@ -7,7 +7,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import path from "node:path";
 import { realpathSync } from "node:fs";
 import type { Lifecycle, LifecycleEvent } from "./lifecycle";
-import type { SseBroker } from "./sse";
+import type { DescriptionsBroker, SseBroker } from "./sse";
 import type { RepoRegistry } from "./registry";
 
 export type Server = ReturnType<typeof startServer>;
@@ -22,11 +22,12 @@ export function startServer(
   lifecycle: Lifecycle,
   sse: SseBroker,
   registry: RepoRegistry,
+  descriptions: DescriptionsBroker,
 ) {
   const meta: ServerMeta = { port, startedAt: Date.now() };
   const server = createServer(async (req, res) => {
     try {
-      await route(req, res, lifecycle, sse, registry, meta);
+      await route(req, res, lifecycle, sse, registry, descriptions, meta);
     } catch (err) {
       console.warn("[daemon] route error:", err);
       if (!res.headersSent) {
@@ -44,6 +45,7 @@ async function route(
   lifecycle: Lifecycle,
   sse: SseBroker,
   registry: RepoRegistry,
+  descriptions: DescriptionsBroker,
   meta: ServerMeta,
 ): Promise<void> {
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -70,6 +72,15 @@ async function route(
 
   if (route === "GET /agents/stream") {
     sse.add(res, lifecycle.payload());
+    return;
+  }
+
+  if (route === "GET /descriptions/stream") {
+    const repoFilter = url.searchParams.get("repo");
+    const filter = repoFilter && path.isAbsolute(repoFilter)
+      ? canonicalizePath(repoFilter)
+      : null;
+    descriptions.add(res, filter);
     return;
   }
 
@@ -120,6 +131,26 @@ async function route(
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: true, removed }));
     sse.broadcast(lifecycle.payload());
+    return;
+  }
+
+  // /event/description-update is a sibling of the lifecycle events, but
+  // it doesn't go through the lifecycle reducer — it's pure SSE fan-out
+  // for `constellation describe` to stream updates to the visualizer.
+  if (route === "POST /event/description-update") {
+    const body = await readBody(req);
+    const payload = safeJson(body);
+    const cwdRaw = str(payload.cwd);
+    const filePath = str(payload.path);
+    const description = str(payload.description);
+    if (!cwdRaw || !path.isAbsolute(cwdRaw) || !filePath || !description) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "cwd (absolute), path, description required" }));
+      return;
+    }
+    const cwd = canonicalizePath(cwdRaw);
+    descriptions.publish({ cwd, path: filePath, description });
+    res.writeHead(204).end();
     return;
   }
 

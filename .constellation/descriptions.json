@@ -100,6 +100,7 @@
   "lib/treemap.ts": "This is the math that decides how big each rectangle on the map should be and where it sits, slicing the available space to keep tiles roughly square rather than long and thin.",
   "lib/types.ts": "This is the shared set of shapes the rest of the app passes around — what a file looks like, what kinds of things a file can export, and what a running agent looks like.",
   "lib/user-dirs.ts": "This figures out where Constellation keeps all its files on your machine — the settings, the saved agent state, the registered repos list, and the process ID — so every part of the app agrees on the same location.",
+  "lib/worktrees.ts": "This asks git which side-branches of the current project are checked out into their own folders, so the top-left switcher can let you arrow between them even when none of them have an agent running.",
   "LICENSE": "This is the legal permission slip that says anyone can use, copy, or build on this project as long as they keep the copyright notice.",
   "next.config.ts": "Wiring — connects other pieces together but doesn't really do anything on its own.",
   "package.json": "This is the project's name tag and shopping list — it says what this project is called, what other projects it relies on, and the commands you can run.",

@@ -210,6 +210,33 @@ function latestAssistantText(content: string): string | null {
   return latest;
 }
 
+// Latest assistant *thought* — prefers a thinking block (the agent's
+// actual reasoning) over the visible text block (which sometimes only
+// contains a short reply). Falls back to text when no thinking is
+// present (e.g. when extended-thinking is disabled). The bubble
+// surfaces this above currentActivity, so this is the "why" the
+// user wants visible.
+function latestAssistantThought(content: string): string | null {
+  const lines = parseLines(content);
+  let latestThinking: string | null = null;
+  let latestText: string | null = null;
+  for (const line of lines) {
+    const obj = line as Record<string, unknown>;
+    if (obj.type !== "assistant") continue;
+    const message = obj.message as Record<string, unknown> | undefined;
+    const items = (message?.content as unknown[] | undefined) ?? [];
+    for (const item of items) {
+      const t = item as Record<string, unknown>;
+      if (t.type === "thinking" && typeof t.thinking === "string") {
+        latestThinking = t.thinking;
+      } else if (t.type === "text" && typeof t.text === "string") {
+        latestText = t.text;
+      }
+    }
+  }
+  return latestThinking ?? latestText;
+}
+
 function lastToolUpdate(
   content: string,
   cwd: string,
@@ -227,6 +254,10 @@ function lastToolUpdate(
         cwd && fp.startsWith(cwd + "/") ? fp.slice(cwd.length + 1) : fp;
     }
   }
+  // Background agents now also surface their reasoning so the bubble
+  // shows the *why* whether the agent is foreground or background.
+  const thought = latestAssistantThought(content);
+  if (thought) update.currentThought = firstClause(thought, 140);
   return update;
 }
 
@@ -241,6 +272,10 @@ function mainUpdate(content: string): Partial<ActiveAgent> {
   if (text) {
     update.currentMessage = firstSentence(text);
   }
+  const thought = latestAssistantThought(content);
+  if (thought) {
+    update.currentThought = firstClause(thought, 140);
+  }
   return update;
 }
 
@@ -249,6 +284,20 @@ function firstSentence(text: string): string {
   const match = cleaned.match(/^[^.!?]*[.!?]/);
   if (match) return match[0].slice(0, 80);
   return cleaned.slice(0, 80);
+}
+
+// Like firstSentence but with a higher cap — the bubble has room for a
+// longer line of thought, and chopping at the first period would lose
+// useful context (e.g. "Switching to TEXT to avoid collisions. The
+// migration backfills…" — we want everything up through the first
+// sentence-ish chunk that fits).
+function firstClause(text: string, max: number): string {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= max) return cleaned;
+  const sliced = cleaned.slice(0, max);
+  const lastSentence = sliced.match(/^.*[.!?](?=\s|$)/);
+  if (lastSentence) return lastSentence[0];
+  return sliced;
 }
 
 // Suppress "unused" for fsWatch — the API is here for future fs.watch upgrade

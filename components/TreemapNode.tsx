@@ -12,6 +12,7 @@ import { memo, useMemo } from "react";
 import { squarify } from "@/lib/treemap";
 import { TREEMAP } from "@/lib/constants";
 import { useHover } from "./HoverContext";
+import { useIsEditing } from "./EditingHighlightContext";
 import { useLod } from "./LodContext";
 import { useResolvedDescription } from "./LiveDescriptionsContext";
 import { useRegisterTile } from "./TileRegistry";
@@ -191,6 +192,7 @@ function FileTile({
     panelHoveredRef,
   } = useHover();
   const registerTile = useRegisterTile(node.path);
+  const isEditing = useIsEditing(node.path);
 
   // While a tile is pinned, hover does not change selection — pin freezes
   // the highlight on its target.
@@ -201,7 +203,7 @@ function FileTile({
   const isUnrelated =
     activePath !== null && !isPinned && !isHovered && !isInput && !isOutput;
 
-  const stateClass = isPinned
+  const baseStateClass = isPinned
     ? "tile-pinned"
     : isHovered
       ? "tile-hovered"
@@ -212,6 +214,13 @@ function FileTile({
           : isUnrelated
             ? "tile-dim"
             : "";
+  // Edit-pulse stacks with the hover/pin state — a tile being edited can
+  // still be the hovered or pinned tile, and the amber pulse should still
+  // play. CSS handles the layering since outline + box-shadow don't
+  // conflict with the bg-color tints used by the other states.
+  const stateClass = isEditing
+    ? `${baseStateClass} tile-editing`.trim()
+    : baseStateClass;
 
   // h is the full article box (border-box), so the borders count against
   // the content area. Without subtracting them the math over-promises by

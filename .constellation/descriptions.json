@@ -1,4 +1,5 @@
 {
+  ".claude/agents/synthesize-app.md": "This is the instruction sheet for an AI helper whose only job is to read the per-file plain-English notes — never the code itself — and write back a big-picture description of what the whole project is. If that description reads wrongly, you know one of the per-file notes is off, which is the whole point of the exercise.",
   ".claude/hooks/agent-idle.sh": "This fires whenever an AI helper finishes a tool call or stops working entirely, telling the background process to mark that helper as no longer busy.",
   ".claude/hooks/agent-start.sh": "This fires the moment an AI helper is about to spawn, sending a quick signal to the background process so it can start tracking the new helper.",
   ".claude/hooks/agent-stop.sh": "This fires when an AI helper finishes its task and tells the background process to clean up or record the result depending on whether the helper was running in the foreground or background.",

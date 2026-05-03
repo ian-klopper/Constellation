@@ -101,7 +101,14 @@ async function maybeRunDescribe(installRoot) {
   // Don't pass --yes here — let describe show its own model picker so
   // the user can choose haiku/sonnet/opus as part of this flow.
   const describe = await import("./describe.mjs");
-  await describe.default({ installRoot, args: ["describe"] });
+  const code = await describe.default({ installRoot, args: ["describe"] });
+  if (code !== 0) {
+    console.log("");
+    console.log(
+      "Descriptions weren't generated. Re-run `constellation describe` " +
+        "from this repo once the issue above is fixed.",
+    );
+  }
 }
 
 async function copyHooks(installRoot, target) {

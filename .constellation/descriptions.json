@@ -38,7 +38,7 @@
   "cli/open.mjs": "This is what runs when you type 'constellation open' — it launches your browser straight to the visualizer, pointed at the repo you're currently in.",
   "cli/rm.mjs": "This is what runs when you type 'constellation rm' — it unregisters the current repo from Constellation, with an option to also remove the hook scripts.",
   "cli/service.mjs": "This manages starting, stopping, and installing both Constellation pieces — the background process and the visualizer website — as system services that survive reboots (Mac only).",
-  "cli/status.mjs": "This is what runs when you type 'constellation status' — it checks whether the background process and the visualizer website are both running and shows a quick health summary.",
+  "cli/status.mjs": "This is what runs when you type 'constellation status' — it shows whether the background process and the visualizer website are running right now, and on Mac whether they're set up to come back automatically after a restart.",
   "cli/util.mjs": "This is the shared toolbox for all the CLI commands — helpers for finding the right folder paths, reading settings, and talking to the background process.",
   "components/AgentBubble.tsx": "This is the little speech bubble above each agent dot that shows what the agent is currently doing — reading, writing, searching, or something else.",
   "components/AgentIcon.tsx": "This is the colored circle that appears on the map when an AI helper is active — sky-blue for the main agent, emerald for foreground helpers, amber for background ones, with an animated ring while they're busy.",

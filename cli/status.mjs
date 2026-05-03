@@ -1,6 +1,8 @@
 // `constellation status` — daemon health + brief stats.
 import { existsSync, readFileSync } from "node:fs";
 import { createConnection } from "node:net";
+import os from "node:os";
+import path from "node:path";
 import {
   getDaemon,
   loadConfig,
@@ -8,6 +10,14 @@ import {
   userPidPath,
   userWebLogPath,
 } from "./util.mjs";
+
+// Mirrors cli/service.mjs:SERVICES. Two short lines duplicated is cheaper
+// than refactoring service.mjs to export them; promote if a third caller
+// ever needs them.
+const PLIST_LABELS = ["com.constellation.daemon", "com.constellation.web"];
+function plistPathFor(label) {
+  return path.join(os.homedir(), "Library/LaunchAgents", `${label}.plist`);
+}
 
 // TCP probe — returns true iff something is listening on 127.0.0.1:<port>.
 // Cheap signal that the web tier is up without doing a full HTTP roundtrip
@@ -83,7 +93,39 @@ export default async function status({ installRoot }) {
   console.log(`Daemon log: ${logPath}`);
   console.log(`Web log:    ${webLogPath}`);
 
-  if (!health || !webUp) {
+  // Mac-only: surface launchd plist presence so a stale install (e.g.
+  // one that predates the web-tier plist) is visible at a glance, even
+  // when the daemon happens to be running anyway.
+  let macPlistsMissing = false;
+  if (process.platform === "darwin") {
+    const states = PLIST_LABELS.map((label) => ({
+      label,
+      installed: existsSync(plistPathFor(label)),
+    }));
+    const missing = states.filter((s) => !s.installed);
+    macPlistsMissing = missing.length > 0;
+    const summary = states
+      .map(
+        (s) =>
+          `${s.label.replace("com.constellation.", "")} ${s.installed ? "✓" : "✗"}`,
+      )
+      .join(", ");
+    console.log(`Launchd:    ${summary}`);
+    if (macPlistsMissing) {
+      console.log("");
+      console.log(
+        `! ${missing.length === 2 ? "Both" : "One"} launchd plist${missing.length === 1 ? "" : "s"} missing — ` +
+          "Constellation won't auto-start on next reboot.",
+      );
+      console.log(
+        "  Run `constellation service install` to register " +
+          (missing.length === 2 ? "them" : "it") +
+          ".",
+      );
+    }
+  }
+
+  if (!health || !webUp || macPlistsMissing) {
     if (!health && pid) {
       console.log("");
       console.log(`Pidfile:    ${pidPath} (pid ${pid} — process may be dead)`);

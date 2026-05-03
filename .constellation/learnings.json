@@ -12,5 +12,12 @@
       "pr": null,
       "insight": "When a CLI needs to find a user-installed binary (claude, node managed by nvm/asdf, homebrew tools), spawning `$SHELL -lc 'command -v <bin>'` is the universal lookup — it sources the user's interactive dotfiles, so it finds anything their terminal would. Plain `which` from a launchd-spawned or Finder-spawned process misses every shell-managed PATH."
     }
+  ],
+  "components/RepoSwitcher.tsx": [
+    {
+      "date": "2026-05-03",
+      "pr": null,
+      "insight": "Index-based arrow navigation needs a client-side stable sort key — never lean on the order the backend happens to deliver. The daemon's repos() sorts by recency, so every agent touch reshuffles the list and a `(idx + 1) % n` next-pointer silently bounces between repos as activity churns. Backends are free to ship lists in whatever order suits them; the consumer that does positional traversal owns sort stability."
+    }
   ]
 }

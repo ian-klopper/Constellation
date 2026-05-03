@@ -74,37 +74,34 @@ export function RepoSwitcher({
   );
 }
 
-// Live list always wins for repos the daemon knows about, but we always
-// keep the current-viewing repo at index 0 so the user never gets
-// "stranded" on a repo the daemon forgot about (e.g. all sessions ended).
+// Live list wins over the server-rendered initial list, but the order
+// is sorted alphabetically by repo name so arrow navigation is stable
+// across agent-activity changes. The daemon reorders `repos` by
+// recency on every touch event; using that order here would mean
+// "next" silently shifts under the user mid-click. We also always
+// include the current-viewing repo so the user never gets "stranded"
+// on a repo the daemon forgot about (e.g. all sessions ended).
 function mergeRepos(
   current: string,
   initial: RepoSummary[],
   live: RepoSummary[],
 ): RepoSummary[] {
-  const out: RepoSummary[] = [];
-  const seen = new Set<string>();
-
-  const currentInLive = live.find((r) => r.repoPath === current);
-  const currentInInitial = initial.find((r) => r.repoPath === current);
-  const currentRow: RepoSummary =
-    currentInLive ??
-    currentInInitial ?? {
+  const map = new Map<string, RepoSummary>();
+  for (const r of live) map.set(r.repoPath, r);
+  for (const r of initial) if (!map.has(r.repoPath)) map.set(r.repoPath, r);
+  if (!map.has(current)) {
+    map.set(current, {
       repoPath: current,
       repoName: basename(current) ?? current,
       sessionCount: 0,
       agentCount: 0,
       lastActiveAt: 0,
-    };
-  out.push(currentRow);
-  seen.add(current);
-
-  for (const r of live) {
-    if (seen.has(r.repoPath)) continue;
-    out.push(r);
-    seen.add(r.repoPath);
+    });
   }
-  return out;
+  return Array.from(map.values()).sort((a, b) => {
+    const byName = a.repoName.localeCompare(b.repoName);
+    return byName !== 0 ? byName : a.repoPath.localeCompare(b.repoPath);
+  });
 }
 
 function basename(p: string): string | null {

@@ -34,6 +34,10 @@ export function userLogPath() {
   return path.join(userDir(), "logs", "daemon.log");
 }
 
+export function userWebLogPath() {
+  return path.join(userDir(), "logs", "web.log");
+}
+
 export function loadConfig(installRoot) {
   // Mirror lib/config.ts: prefer the user file, seed from bundled defaults.
   const target = userConfigPath();

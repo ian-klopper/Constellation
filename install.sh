@@ -283,8 +283,8 @@ say "Installing dependencies in $INSTALL_DIR ..."
 npm ci --prefix "$INSTALL_DIR"
 
 say ""
-say "Building the daemon ..."
-( cd "$INSTALL_DIR" && npm run build:daemon )
+say "Building the daemon and visualizer website ..."
+( cd "$INSTALL_DIR" && npm run build )
 
 # 4. Symlink CLI onto PATH ---------------------------------------------------
 
@@ -330,8 +330,9 @@ if [ "$(uname)" = "Darwin" ]; then
   "$CLI_SRC" service install
 else
   say ""
-  say "Linux detected — launchd integration is Mac-only. Run the daemon manually:"
-  say "    node $INSTALL_DIR/dist/daemon/index.js"
+  say "Linux detected — launchd integration is Mac-only. Run the two pieces manually:"
+  say "    node $INSTALL_DIR/dist/daemon/index.js              # background process"
+  say "    node $INSTALL_DIR/scripts/web-server.mjs            # visualizer website"
   say "or under a process manager of your choice (systemd, supervisord, pm2)."
 fi
 

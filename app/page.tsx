@@ -11,7 +11,9 @@ import { scanProject, countTree } from "@/lib/scan";
 import { Visualizer } from "@/components/Visualizer";
 import { RepoSwitcher } from "@/components/RepoSwitcher";
 import { DetailSlider } from "@/components/DetailSlider";
+import { RoadmapToggle } from "@/components/RoadmapToggle";
 import { fetchRepos } from "@/lib/daemon-client";
+import { readRoadmap } from "@/lib/roadmap";
 import { listWorktrees } from "@/lib/worktrees";
 import type { RepoSummary } from "@/lib/types";
 
@@ -26,9 +28,10 @@ export default async function HomePage({
   const requested = Array.isArray(params.repo) ? params.repo[0] : params.repo;
   const root = resolveRequestedRoot(requested, process.cwd());
 
-  const [tree, daemonRepos] = await Promise.all([
+  const [tree, daemonRepos, roadmap] = await Promise.all([
     scanProject(root),
     fetchRepos(),
+    readRoadmap(root),
   ]);
   const stats = countTree(tree.tree);
   const worktreePaths = listWorktrees(root);
@@ -40,6 +43,7 @@ export default async function HomePage({
         <RepoSwitcher current={root} repos={repos} />
         <div className="flex items-center gap-6">
           <DetailSlider />
+          {roadmap && <RoadmapToggle data={roadmap} />}
           <span className="text-right">
             {stats.dirs} directories · {stats.files} files · {stats.lines} lines
           </span>

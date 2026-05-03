@@ -60,19 +60,19 @@ export default async function describe({ installRoot, args }) {
   }
   const target = canonicalCwd();
 
-  const claudeBin = await findClaude();
-  if (!claudeBin) {
+  const lookup = await findClaude();
+  if (!lookup.bin) {
     console.error(
-      "Couldn't find Claude Code. Looked on PATH and at " +
-        "~/.claude/local/claude.\n" +
-        "Install it from https://claude.com/claude-code, then re-run " +
+      "Couldn't find Claude Code. Looked in:\n" +
+        lookup.tried.map((t) => `  - ${t}`).join("\n") +
+        "\n\nInstall it from https://claude.com/claude-code, then re-run " +
         "`constellation describe`.\n" +
-        "(If you installed via the native installer, the shell alias " +
-        "isn't visible to scripts — that's why we also check " +
-        "~/.claude/local/claude directly.)",
+        "If it's installed somewhere else, make sure it's on PATH or " +
+        "symlink it into one of the locations above.",
     );
     return 64;
   }
+  const claudeBin = lookup.bin;
 
   const allFiles = await walkRepo(target);
   if (allFiles.length === 0) {
@@ -287,33 +287,100 @@ function startSpinner(label) {
   };
 }
 
-// Returns an absolute path to the claude binary, or null if we can't
-// find one. Checks PATH first (covers npm global, Homebrew). Falls
-// back to ~/.claude/local/claude — Anthropic's native installer puts
-// the binary there and writes a shell alias, but the alias is invisible
-// to non-interactive child processes, so PATH alone misses it.
+// Returns { bin, tried } where bin is an absolute path to the claude
+// binary or null, and tried is the list of every place we looked
+// (used to build a diagnostic error message).
+//
+// Lookup order:
+//   1. The PATH this process inherited.
+//   2. The user's login shell — sources their dotfiles, so this picks
+//      up homebrew, nvm, asdf, mise, fnm, custom prefixes, and shell
+//      aliases that an interactive terminal would see but a launchd-
+//      spawned or Finder-spawned process would not.
+//   3. A short list of well-known fixed locations as a last resort.
 async function findClaude() {
+  const tried = [];
+
   const fromPath = await whichClaude();
-  if (fromPath) return fromPath;
-  const native = path.join(os.homedir(), ".claude", "local", "claude");
+  tried.push("$PATH (this process)");
+  if (fromPath && isExecutable(fromPath)) {
+    return { bin: fromPath, tried };
+  }
+
+  const fromLoginShell = await whichClaudeViaLoginShell();
+  tried.push(`$PATH (login shell: ${process.env.SHELL || "/bin/sh"} -lc)`);
+  if (fromLoginShell && isExecutable(fromLoginShell)) {
+    return { bin: fromLoginShell, tried };
+  }
+
+  const fixedCandidates = [
+    path.join(os.homedir(), ".claude", "local", "claude"),
+    path.join(os.homedir(), ".local", "bin", "claude"),
+    path.join(os.homedir(), ".npm-global", "bin", "claude"),
+    "/opt/homebrew/bin/claude",
+    "/usr/local/bin/claude",
+  ];
+  for (const c of fixedCandidates) {
+    tried.push(c);
+    if (isExecutable(c)) return { bin: c, tried };
+  }
+
+  return { bin: null, tried };
+}
+
+function isExecutable(p) {
   try {
-    accessSync(native, constants.X_OK);
-    return native;
+    accessSync(p, constants.X_OK);
+    return true;
   } catch {
-    return null;
+    return false;
   }
 }
 
-function whichClaude() {
+// Spawns the user's login shell (zsh on modern macOS, bash elsewhere)
+// with -lc so it sources their interactive dotfiles, then runs
+// `command -v claude` — POSIX, supported by bash/zsh/dash/sh. We do
+// not use `which` because it is not a POSIX builtin and behavior
+// across shells varies. Returns null on any failure (no claude found,
+// shell errored, dotfiles broken).
+function whichClaudeViaLoginShell() {
+  const shell = process.env.SHELL || "/bin/sh";
   return new Promise((resolve) => {
-    const proc = spawn("which", ["claude"], {
+    const proc = spawn(shell, ["-lc", "command -v claude"], {
       stdio: ["ignore", "pipe", "ignore"],
     });
     let out = "";
     proc.stdout.on("data", (b) => {
       out += b.toString();
     });
-    proc.on("exit", (code) => resolve(code === 0 ? out.trim() : null));
+    proc.on("exit", (code) => {
+      if (code !== 0) return resolve(null);
+      // `command -v` may print the resolved path or, for an alias,
+      // something like "claude: aliased to /Users/.../claude". Take
+      // the last whitespace-separated token of the last line and
+      // accept it only if it looks like an absolute path.
+      const line = out.trim().split("\n").pop() || "";
+      const token = line.split(/\s+/).pop() || "";
+      resolve(token.startsWith("/") ? token : null);
+    });
+    proc.on("error", () => resolve(null));
+  });
+}
+
+function whichClaude() {
+  return new Promise((resolve) => {
+    const proc = spawn("/usr/bin/env", ["sh", "-c", "command -v claude"], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let out = "";
+    proc.stdout.on("data", (b) => {
+      out += b.toString();
+    });
+    proc.on("exit", (code) => {
+      if (code !== 0) return resolve(null);
+      const token = (out.trim().split("\n").pop() || "").split(/\s+/).pop();
+      resolve(token && token.startsWith("/") ? token : null);
+    });
     proc.on("error", () => resolve(null));
   });
 }

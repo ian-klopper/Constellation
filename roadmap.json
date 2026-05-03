@@ -1,0 +1,38 @@
+{
+  "$schema": "./roadmap.schema.json",
+  "right_now": "Replace this when you sit down — one sentence on what you're about to do.",
+  "short_term": [],
+  "mid_term": [],
+  "long_term": [
+    {
+      "id": "live-agent-overlay",
+      "title": "Live AI-agent activity overlay matures (read/write badges, reasoning callouts)",
+      "status": "queued",
+      "notes": "Already in CLAUDE.md as the project's long-term goal — overlay live agent activity on top of the static map."
+    }
+  ],
+  "recently_shipped": [
+    {
+      "id": "web-tier-launchd",
+      "title": "Web tier runs under launchd alongside the daemon",
+      "shipped_at": "2026-05-02",
+      "commit": "5ed553b"
+    },
+    {
+      "id": "readme-vibecoder-tone",
+      "title": "README restructured into vibecoder-friendly tone",
+      "shipped_at": "2026-05-02",
+      "commit": "6d9296e"
+    },
+    {
+      "id": "describe-stdin",
+      "title": "describe: pipe user prompt through stdin to avoid E2BIG on large repos",
+      "shipped_at": "2026-05-02",
+      "commit": "d2375a6"
+    }
+  ],
+  "known_issues": [],
+  "open_questions": [],
+  "anti_goals": [],
+  "parked_ideas": []
+}

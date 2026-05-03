@@ -102,6 +102,8 @@
   "package.json": "This is the project's name tag and shopping list — it says what this project is called, what other projects it relies on, and the commands you can run.",
   "postcss.config.mjs": "Wiring — connects other pieces together but doesn't really do anything on its own.",
   "README.md": "This is the project's front door — it explains what Constellation does, how to install it, and how to start using it.",
+  "roadmap.json": "This is the project tracker — what you're working on right now, what you want to ship in the next few days, weeks, and months, plus what just shipped, what's broken, what you're unsure about, and what's parked. Edit it as a side effect of doing work.",
+  "roadmap.schema.json": "This is the rulebook for the project tracker — it spells out exactly which sections must exist in roadmap.json and what each item is allowed to contain, so the file can't quietly drift when the AI updates it.",
   "scripts/dev.mjs": "This is the development supervisor — when you run 'npm run dev', it starts both the background process and the web visualizer side by side, and shuts them both down together on Ctrl-C.",
   "scripts/install-settings.mjs": "This is the settings-merge step of the installer — it shows you exactly what will change in your Claude Code settings, including the hook scripts that will run, then writes the file only after you confirm.",
   "scripts/web-server.mjs": "This is the launcher macOS uses to keep the visualizer website running in the background — it reads the chosen port from settings and starts the web server, restarting automatically if it ever crashes.",

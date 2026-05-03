@@ -8,8 +8,9 @@
 // repo registration. Pass --yes to skip the interactive confirm (used
 // from `add`, which has already confirmed).
 import { spawn } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { accessSync, constants, existsSync, statSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { canonicalCwd } from "./util.mjs";
@@ -59,10 +60,16 @@ export default async function describe({ installRoot, args }) {
   }
   const target = canonicalCwd();
 
-  if (!(await commandExists("claude"))) {
+  const claudeBin = await findClaude();
+  if (!claudeBin) {
     console.error(
-      "Couldn't find `claude` on PATH. Install Claude Code first " +
-        "(https://claude.com/claude-code) and try again.",
+      "Couldn't find Claude Code. Looked on PATH and at " +
+        "~/.claude/local/claude.\n" +
+        "Install it from https://claude.com/claude-code, then re-run " +
+        "`constellation describe`.\n" +
+        "(If you installed via the native installer, the shell alias " +
+        "isn't visible to scripts — that's why we also check " +
+        "~/.claude/local/claude directly.)",
     );
     return 64;
   }
@@ -144,6 +151,7 @@ export default async function describe({ installRoot, args }) {
   );
   const result = await runClaude({
     cwd: target,
+    bin: claudeBin,
     systemPrompt: tonePrompt,
     userPrompt,
     model: flags.model,
@@ -279,12 +287,34 @@ function startSpinner(label) {
   };
 }
 
-function commandExists(cmd) {
-  // POSIX-ish: try `which`. On Mac/Linux this is fine.
+// Returns an absolute path to the claude binary, or null if we can't
+// find one. Checks PATH first (covers npm global, Homebrew). Falls
+// back to ~/.claude/local/claude — Anthropic's native installer puts
+// the binary there and writes a shell alias, but the alias is invisible
+// to non-interactive child processes, so PATH alone misses it.
+async function findClaude() {
+  const fromPath = await whichClaude();
+  if (fromPath) return fromPath;
+  const native = path.join(os.homedir(), ".claude", "local", "claude");
+  try {
+    accessSync(native, constants.X_OK);
+    return native;
+  } catch {
+    return null;
+  }
+}
+
+function whichClaude() {
   return new Promise((resolve) => {
-    const proc = spawn("which", [cmd], { stdio: "ignore" });
-    proc.on("exit", (code) => resolve(code === 0));
-    proc.on("error", () => resolve(false));
+    const proc = spawn("which", ["claude"], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let out = "";
+    proc.stdout.on("data", (b) => {
+      out += b.toString();
+    });
+    proc.on("exit", (code) => resolve(code === 0 ? out.trim() : null));
+    proc.on("error", () => resolve(null));
   });
 }
 
@@ -368,7 +398,7 @@ function buildUserPrompt(paths) {
   ].join("\n");
 }
 
-async function runClaude({ cwd, systemPrompt, userPrompt, model }) {
+async function runClaude({ cwd, bin, systemPrompt, userPrompt, model }) {
   return await new Promise((resolve) => {
     // The user prompt for a large repo (one bullet per file) easily runs
     // into hundreds of KB. macOS's ARG_MAX is ~256 KB, so passing it as
@@ -387,7 +417,7 @@ async function runClaude({ cwd, systemPrompt, userPrompt, model }) {
     ];
     // Capture stderr instead of inheriting so claude's output doesn't
     // collide with our spinner; print it after the run if non-empty.
-    const proc = spawn("claude", args, {
+    const proc = spawn(bin, args, {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
     });

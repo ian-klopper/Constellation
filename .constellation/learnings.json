@@ -124,5 +124,12 @@
       "pr": null,
       "insight": "A child with position: absolute; bottom: 100% must be parented to a fixed-size element, not the outer transform/opacity wrapper. The outer wrapper has willChange:transform,opacity and no fixed height, so a bottom-100% child whose own height affects the parent's height creates a circular sizing dependency. Parent the bubble to the inner ICON_SIZE-square relative div instead — bottom: 100% then resolves to a fixed 28px regardless of bubble height, and opacity still cascades from the outer wrapper through the inner div."
     }
+  ],
+  "app/page.tsx": [
+    {
+      "date": "2026-05-04",
+      "pr": null,
+      "insight": "A context provider lifted to serve a new consumer must wrap every site that calls its hook, not just the original consumer's subtree. When the new consumer lives in a sibling branch (e.g. a header component while the existing consumer is the page body), wrapping only the existing block leaves the header outside the provider and the new consumer throws 'must be used inside Provider' on first render. The lift only succeeds if it encloses *all* call sites — sketch the tree and trace each hook caller before edits."
+    }
   ]
 }

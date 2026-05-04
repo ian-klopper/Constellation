@@ -33,7 +33,6 @@ import {
   type HoverContextValue,
   type Pos,
 } from "./HoverContext";
-import { TileRegistryProvider } from "./TileRegistry";
 import { AgentOverlay } from "./AgentOverlay";
 import { ConstellationOverlay } from "./ConstellationOverlay";
 import { PinController } from "./PinController";
@@ -462,8 +461,7 @@ export function Visualizer({
 
   return (
     <HoverContext.Provider value={hoverValue}>
-      <TileRegistryProvider>
-          <ZoomPanContext.Provider value={zoomPanValue}>
+      <ZoomPanContext.Provider value={zoomPanValue}>
             {/*
               Container holds the transformed wrapper *and* HoverPanel as
               siblings. HoverPanel must be a sibling (not a descendant) of the
@@ -510,7 +508,6 @@ export function Visualizer({
             <AgentOverlay root={root} container={containerRef.current} />
             <PinController />
           </ZoomPanContext.Provider>
-      </TileRegistryProvider>
     </HoverContext.Provider>
   );
 }

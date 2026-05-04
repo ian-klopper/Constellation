@@ -1,6 +1,6 @@
 # Constellation
 
-A codebase visualizer built with Next.js 16 + React 19 + TypeScript + Tailwind v4. Scans a repo, extracts top-level exports via `ts-morph`, and renders it as a WinDirStat-style squarified treemap with live AI-agent activity overlaid (icons, trails, tile pulses, an activity rail).
+A codebase visualizer built with Next.js 16 + React 19 + TypeScript + Tailwind v4. Scans a repo, extracts top-level exports via `ts-morph`, and renders it as a WinDirStat-style squarified treemap with live AI-agent activity overlaid (icons, trails, tile pulses, an agent dock).
 
 The home page renders `process.cwd()` by default — Constellation visualizes itself. **This CLAUDE.md is part of the visualization**, so keep it accurate. When architecture, layout, or workflow changes, update this file in the same commit.
 

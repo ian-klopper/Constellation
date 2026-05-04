@@ -1,7 +1,7 @@
 /**
  * Minimal pinpoint layer for live agent icons. Renders one colored dot
  * per anchored agent (those whose currentPath resolves to a visible tile).
- * Agents with no tile position appear only in the AgentRail — this overlay
+ * Agents with no tile position appear only in the AgentDock — this overlay
  * no longer renders a dock or bubbles. Icon positions are viewport-clamped
  * via useAgentPositions so agents on edge tiles never clip outside the
  * visualizer container.

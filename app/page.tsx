@@ -27,7 +27,8 @@ import { DetailSlider } from "@/components/DetailSlider";
 import { LiveDescriptionsBridge } from "@/components/LiveDescriptionsContext";
 import { RoadmapToggle } from "@/components/RoadmapToggle";
 import { fetchRepos, fetchAgents } from "@/lib/daemon-client";
-import { AgentRail } from "@/components/AgentRail";
+import { AgentDock } from "@/components/AgentDock";
+import { TileRegistryProvider } from "@/components/TileRegistry";
 import { TileActivityProvider } from "@/hooks/useTileActivity";
 import { readRoadmap } from "@/lib/roadmap";
 import { listWorktrees } from "@/lib/worktrees";
@@ -56,26 +57,26 @@ export default async function HomePage({
 
   return (
     <main className="flex h-screen flex-col">
-      <header className="flex items-center justify-between gap-4 border-b border-zinc-200 px-6 py-3 text-[11px] uppercase tracking-wider text-zinc-500">
-        <RepoSwitcher current={root} repos={repos} />
-        <div className="flex items-center gap-6">
-          <DetailSlider />
-          {roadmap && <RoadmapToggle data={roadmap} />}
-          <span className="text-right">
-            {BUILD_ID} · {initialAgents.length} agents · {stats.dirs} directories · {stats.files} files · {stats.lines} lines
-          </span>
-        </div>
-      </header>
-      <TileActivityProvider root={root} initialAgents={initialAgents}>
-        <div className="flex min-h-0 flex-1">
+      <TileRegistryProvider>
+        <header className="flex items-center justify-between gap-4 border-b border-zinc-200 px-6 py-3 text-[11px] uppercase tracking-wider text-zinc-500">
+          <RepoSwitcher current={root} repos={repos} />
+          <div className="flex items-center gap-6">
+            <DetailSlider />
+            {roadmap && <RoadmapToggle data={roadmap} />}
+            <AgentDock root={root} initialAgents={initialAgents} />
+            <span className="text-right">
+              {BUILD_ID} · {initialAgents.length} agents · {stats.dirs} directories · {stats.files} files · {stats.lines} lines
+            </span>
+          </div>
+        </header>
+        <TileActivityProvider root={root} initialAgents={initialAgents}>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <LiveDescriptionsBridge root={root}>
               <Visualizer tree={tree} root={root} />
             </LiveDescriptionsBridge>
           </div>
-          <AgentRail root={root} initialAgents={initialAgents} />
-        </div>
-      </TileActivityProvider>
+        </TileActivityProvider>
+      </TileRegistryProvider>
     </main>
   );
 }

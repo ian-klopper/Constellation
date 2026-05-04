@@ -65,18 +65,16 @@ export const BUBBLE = {
   LINE_CLAMP: 2,
 } as const;
 
-// Right-side activity rail. Holds one row per live agent with icon +
-// currentTool·currentPath + multi-line thought area. Collapses to
-// COLLAPSED_WIDTH when no agents are present so the visualizer canvas
-// fills the full viewport when the system is idle. The rail's only
-// fade-out is useAgentLifecycle's 400ms removingAt window — fossil
-// trails are a separate ConstellationOverlay concern.
-export const RAIL = {
-  WIDTH: 340,
-  COLLAPSED_WIDTH: 40,
-  ROW_GAP: 8,
-  HEADER_HEIGHT: 32,
-  EXPAND_MS: 250,
+// Compact top-right indicator for agents with no tile to anchor to.
+// Hidden when empty. Detail comes from hover/focus popover.
+// AVATAR_SIZE is deliberately small so adding the dock does not grow
+// the header (text-[11px] py-3 fits 20px avatars within existing line-height).
+export const DOCK = {
+  AVATAR_SIZE: 20,
+  AVATAR_OVERLAP: 8,
+  MAX_VISIBLE: 5,
+  POPOVER_WIDTH: 280,
+  POPOVER_DELAY_MS: 200,
 } as const;
 
 export const OVERLAY_TIMING = {

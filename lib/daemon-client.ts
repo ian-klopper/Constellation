@@ -29,10 +29,10 @@ export async function fetchRepos(): Promise<RepoSummary[]> {
 }
 
 /**
- * Returns the current agent list for SSR seeding of the AgentRail.
+ * Returns the current agent list for SSR seeding of the AgentDock.
  * Hits the daemon first; on failure reads the on-disk lifecycle files
  * the same way /api/agents does — so the initial render shows live
- * agents rather than flashing an empty rail.
+ * agents rather than flashing an empty dock.
  */
 export async function fetchAgents(): Promise<ActiveAgent[]> {
   const config = loadConfig();

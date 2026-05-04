@@ -2,12 +2,11 @@
  * Computes screen positions for every agent icon. Agents anchored to a
  * file (currentPath) sit at the top-right corner of that tile. Agents
  * without a resolved tile (no currentPath, or path not in the registry)
- * are omitted — AgentOverlay skips them (they appear only in the rail).
+ * are omitted — AgentOverlay skips them (they appear only in the AgentDock).
  *
  * Positions are clamped to the visualizer container's bounding rect so
  * an agent working on a tile near the viewport edge stays fully visible.
- * The container bbox already excludes the AgentRail (which is its flex
- * sibling), so no manual RAIL.WIDTH subtraction is needed.
+ * The container bbox is sized to fit the treemap exactly (no siblings).
  *
  * Re-runs on agent change, registry change, window resize, scroll, and
  * every transform tick (so icons stay anchored under live zoom + pan).

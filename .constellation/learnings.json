@@ -4,6 +4,16 @@
       "date": "2026-05-03",
       "pr": null,
       "insight": "Apostrophes inside a jq expression wrapped in bash single-quotes terminate the bash string. Contractions like \"today's\" silently break the hook. Avoid contractions in any `jq -nc '...'` block, or escape with `'\\''`."
+    },
+    {
+      "date": "2026-05-03",
+      "pr": null,
+      "insight": "Running `next build` against a directory that a `next start` process is currently serving from blows up the running server: the rebuild rewrites .next/ chunks with new hashes, but the running process still hands out HTML referencing the old hashes (or the new HTML referencing chunks the process can't serve), so the browser gets HTTP 500 on the first chunk fetch and the page fails to load. `npm run build:web` must bounce the launchd web tier when it's serving from this dir — see `scripts/bounce-web-if-stale.mjs`. Same shape applies to any long-lived asset server whose on-disk artifacts get rewritten under it (Vite preview, webpack-dev-server in non-watch mode, etc.)."
+    },
+    {
+      "date": "2026-05-03",
+      "pr": null,
+      "insight": "lsof's selector flags (`-p`, `-d`, `-u`, `-c`, etc.) default to OR, not AND. `lsof -p PID -d cwd` returns the cwd of every process on the machine, then a `-p`-matched entry somewhere in the middle. To AND them you must add `-a` explicitly (`lsof -a -p PID -d cwd`). Default-OR semantics mean a buggy lsof selector silently returns wrong-but-plausible data, not an error. Prefer reading from authoritative sources where they exist — for launchd processes, `launchctl print` already includes `working directory = …`."
     }
   ],
   "cli/describe.mjs": [
@@ -75,6 +85,18 @@
       "date": "2026-05-03",
       "pr": null,
       "insight": "When the user rejects a Claude Code Agent tool spawn at the prompt, agent-start has already fired but no agent-stop or SubagentStop ever will — Claude Code does not (yet) emit a cancellation hook. A periodic TTL sweep is the only reliable cleanup. `lastActiveAt === startedAt` is the cleanest proxy for 'never ran' because every touch path bumps lastActiveAt, but not every touch sets currentPath (Bash/Grep have no file_path)."
+    },
+    {
+      "date": "2026-05-03",
+      "pr": null,
+      "insight": "Claude Code emits no 'session ended' event when the user closes their terminal — Stop fires per-turn, not per-session. Without a TTL sweep that includes idle main agents, every `claude` invocation leaves a __main.json that the daemon will keep reporting as alive forever, producing visual duplicates as old sessions accumulate. Pair the sweep with lazy resurrection on next touch (handleTouch already creates the entry from scratch if missing) so an over-eager TTL is harmless — the user sees their session reappear the moment they do anything."
+    }
+  ],
+  "components/AgentBubble.tsx": [
+    {
+      "date": "2026-05-03",
+      "pr": null,
+      "insight": "When a CSS-triangle tooltip arrow is built as outer-color + inner-mask, the mask's negative margin must point AWAY from its anchor edge — top-full anchor needs marginTop:-1, bottom-full anchor needs marginBottom:-1. Flipping arrow direction by changing only borderTop→borderBottom without flipping the margin produces a 1-px border seam that is easy to miss in screenshots but visible at zoom."
     }
   ],
   "hooks/sse-registry.ts": [
@@ -87,6 +109,13 @@
       "date": "2026-05-03",
       "pr": null,
       "insight": "Cache the most recent payload per (url, event) at the registry level and replay synchronously to new subscribers. The daemon's SseBroker already replays current state on connect, but a *second* hook subscribing to an existing shared connection won't get a fresh on-connect snapshot — the cache is what closes that gap. Without it, a freshly-mounted component stares at empty state until the next event."
+    }
+  ],
+  "components/ConstellationOverlay.tsx": [
+    {
+      "date": "2026-05-03",
+      "pr": null,
+      "insight": "Inline-arrow ref callbacks fire cleanup with null on EVERY render (because the function reference changes), not just on unmount. If your cleanup deletes per-element state, you will silently churn that state every snapshot tick. Either return a cleanup function (React 19), memoize the ref callback per stable key, or simply do not delete in the cleanup branch and prune state elsewhere."
     }
   ]
 }

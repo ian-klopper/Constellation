@@ -51,10 +51,22 @@ export const HOVER_PANEL = {
 
 export const OVERLAY = {
   ICON_SIZE: 28,
-  PARK_TOP: 12,
-  PARK_RIGHT: 16,
-  PARK_GAP: 6,
-  STACK_OFFSET: 14,
+} as const;
+
+// Right-side activity rail. Holds one row per live or recently-finished
+// agent with icon + currentTool·currentPath + multi-line thought area.
+// Collapses to COLLAPSED_WIDTH when no agents are present so the
+// visualizer canvas fills the full viewport when the system is idle.
+export const RAIL = {
+  WIDTH: 340,
+  COLLAPSED_WIDTH: 40,
+  ROW_GAP: 8,
+  HEADER_HEIGHT: 32,
+  // How long a finished agent's row lingers in the rail before fading.
+  // Shorter than CONSTELLATION.FOSSIL_LIFETIME_MS (30s) — the rail is
+  // a live activity feed, not a history log.
+  FOSSIL_LIFETIME_MS: 4_000,
+  EXPAND_MS: 250,
 } as const;
 
 export const OVERLAY_TIMING = {
@@ -74,7 +86,17 @@ export const OVERLAY_MOTION = {
   EASING: "cubic-bezier(0.22, 1, 0.36, 1)",
   TRANSFORM_MS: 450,
   OPACITY_MS: 350,
-  BUBBLE_OPACITY_MS: 200,
+} as const;
+
+// Universal tile-activity fade. Every tool touch from every agent writes a
+// timestamped pathHistory entry; useTileActivity decays each entry over
+// FADE_MS using a 200ms heartbeat. OPACITY_QUANTUM rounds computed opacity
+// to 5% steps so most ticks produce identical values and TreemapNode's
+// React.memo stays stable.
+export const TILE_TOUCH = {
+  FADE_MS: 6000,
+  TICK_MS: 200,
+  OPACITY_QUANTUM: 0.05,
 } as const;
 
 // Per-agent file-trail overlay. PATH_HISTORY_MAX is the server-side cap on
@@ -87,6 +109,16 @@ export const CONSTELLATION = {
   ALIVE_OPACITY: 0.85,
   FOSSIL_LIFETIME_MS: 30_000,
   PATH_HISTORY_MAX: 50,
+  // How long an individual segment stays visible after its ts (epoch seconds).
+  // Segments fade from full bright to zero over this window so the tail of a
+  // long trail gradually disappears while the head stays vivid.
+  SEGMENT_LIFETIME_MS: 60_000,
+  // Duration of the stroke-dashoffset draw-in tween when a new segment first
+  // becomes visible. Matches OVERLAY_MOTION.EASING for a consistent feel.
+  SEGMENT_DRAW_IN_MS: 350,
+  // Quadratic-bezier corner radius (CSS px) for the orthogonal routing elbow.
+  // Below 2× this value on either axis, segments degenerate to straight lines.
+  ROUTING_CORNER_RADIUS: 6,
 } as const;
 
 // Zoom + LOD constants for the cursor-anchored scroll-zoom + drag-pan

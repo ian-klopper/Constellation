@@ -1,12 +1,13 @@
 /**
- * The colored circle on top of a file tile (or parked at the top-right).
- * Sky for the main agent, emerald for foreground subagents, amber for
- * background. The "ping" ring animates while the agent is active and
- * disappears when idle.
+ * The colored circle on top of a file tile. Sky for the main agent,
+ * emerald for foreground subagents, amber for background. The "ping"
+ * ring animates while the agent is active and disappears when idle.
+ * Colors come from agentColor() — the single palette source.
  */
 "use client";
 
 import type { ActiveAgent } from "@/lib/types";
+import { agentColor } from "@/lib/agent-colors";
 
 export function AgentIcon({ agent, idle }: { agent: ActiveAgent; idle: boolean }) {
   const isMain = agent.id === "main";
@@ -24,8 +25,7 @@ export function AgentIcon({ agent, idle }: { agent: ActiveAgent; idle: boolean }
     : isBg
       ? `${agent.subagent_type} (background) · ${activity}`
       : `${agent.subagent_type} · ${activity}`;
-  const bg = isMain ? "bg-sky-500" : isBg ? "bg-amber-500" : "bg-emerald-500";
-  const ping = isMain ? "bg-sky-400" : isBg ? "bg-amber-400" : "bg-emerald-400";
+  const { ringClass: bg, pingClass: ping } = agentColor(agent);
   return (
     <div
       title={tooltip}

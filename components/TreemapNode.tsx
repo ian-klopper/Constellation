@@ -8,16 +8,31 @@
  */
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, type CSSProperties } from "react";
 import { squarify } from "@/lib/treemap";
 import { TREEMAP } from "@/lib/constants";
 import { useHover } from "./HoverContext";
-import { useIsEditing } from "./EditingHighlightContext";
+import { useTileActivity, type TileTouch } from "@/hooks/useTileActivity";
 import { useLod } from "./LodContext";
 import { useResolvedDescription } from "./LiveDescriptionsContext";
 import { useRegisterTile } from "./TileRegistry";
 import { useZoomPan } from "./ZoomPanContext";
 import type { TreeNode } from "@/lib/types";
+
+/**
+ * Builds the JS-computed box-shadow string for the tile-touch glow.
+ * Computing in JS (not CSS calc) sidesteps the @property registration
+ * requirement that `color-mix(in srgb, var(--x) calc(var(--y)*35%), transparent)`
+ * would need for an unregistered <number> custom property.
+ */
+function buildTileTouchShadow(opacity: number, color: string): string {
+  // color is "rgb(r g b)" — use CSS level-4 / syntax for alpha.
+  const alpha = (opacity * 0.45).toFixed(3);
+  // Strip "rgb(" prefix and ")" suffix to get "r g b".
+  const rgb = color.replace(/^rgb\(/, "").replace(/\)$/, "").trim();
+  const spread = (4 * opacity).toFixed(2);
+  return `0 0 0 ${spread}px rgb(${rgb} / ${alpha})`;
+}
 
 const {
   LABEL_HEIGHT,
@@ -192,7 +207,10 @@ function FileTile({
     panelHoveredRef,
   } = useHover();
   const registerTile = useRegisterTile(node.path);
-  const isEditing = useIsEditing(node.path);
+  const touch = useTileActivity(node.path);
+  const tileTouchShadow = touch
+    ? buildTileTouchShadow(touch.opacity, touch.color)
+    : undefined;
 
   // While a tile is pinned, hover does not change selection — pin freezes
   // the highlight on its target.
@@ -214,12 +232,16 @@ function FileTile({
           : isUnrelated
             ? "tile-dim"
             : "";
-  // Edit-pulse stacks with the hover/pin state — a tile being edited can
-  // still be the hovered or pinned tile, and the amber pulse should still
-  // play. CSS handles the layering since outline + box-shadow don't
-  // conflict with the bg-color tints used by the other states.
-  const stateClass = isEditing
-    ? `${baseStateClass} tile-editing`.trim()
+  // Touch classes stack with hover/pin state — a tile being touched by an
+  // agent can still be hovered or pinned. CSS handles layering since
+  // box-shadow and outline don't conflict with bg-color tints.
+  const touchClass = touch
+    ? touch.isEdit
+      ? "tile-touched tile-touched-edit"
+      : "tile-touched"
+    : "";
+  const stateClass = touchClass
+    ? `${baseStateClass} ${touchClass}`.trim()
     : baseStateClass;
 
   // h is the full article box (border-box), so the borders count against
@@ -251,7 +273,15 @@ function FileTile({
     <article
       ref={registerTile}
       data-path={node.path}
-      style={style}
+      style={{
+        ...style,
+        ...(tileTouchShadow
+          ? {
+              "--tile-touch-shadow": tileTouchShadow,
+              "--tile-touch-color": touch?.color,
+            }
+          : {}),
+      } as CSSProperties}
       onMouseEnter={(e) => setHover(node.path, { x: e.clientX, y: e.clientY })}
       onMouseMove={(e) => setHover(node.path, { x: e.clientX, y: e.clientY })}
       onMouseLeave={(e) => {

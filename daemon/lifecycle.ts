@@ -490,6 +490,31 @@ export class Lifecycle {
     return keyFor(sessionId, id);
   }
 
+  /**
+   * Reap subagent entries that were created by `agent-start` but never
+   * received a single tool-use touch. The most common cause is a human
+   * rejecting an `Agent` tool spawn at the Claude Code prompt — no
+   * agent-stop or SubagentStop fires for a rejected spawn, so the
+   * entry would otherwise stick forever. `lastActiveAt === startedAt`
+   * is the reliable proxy for "never ran" since handleTouch always
+   * bumps lastActiveAt. Skips main and background agents (the latter
+   * are reaped by SubagentStop via agentId match).
+   */
+  sweepZombies(maxAgeSeconds: number): void {
+    const now = nowSeconds();
+    const toRemove: string[] = [];
+    for (const [key, agent] of this.agents) {
+      if (agent.id === "main") continue;
+      if (agent.kind !== "foreground") continue;
+      if (agent.lastActiveAt !== agent.startedAt) continue;
+      if (now - agent.startedAt < maxAgeSeconds) continue;
+      toRemove.push(key);
+    }
+    if (toRemove.length === 0) return;
+    for (const key of toRemove) this.removeAgent(key);
+    this.broadcast();
+  }
+
   private removeAgent(key: string): void {
     const agent = this.agents.get(key);
     this.agents.delete(key);

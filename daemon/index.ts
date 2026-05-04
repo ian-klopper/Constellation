@@ -56,6 +56,19 @@ async function main() {
 
   const server = startServer(config.daemon.port, lifecycle, sse, registry, descriptions);
 
+  // Reap rejected-Agent zombie entries every 30s. PreToolUse on Agent
+  // creates a lifecycle entry, but if the user rejects the spawn, no
+  // agent-stop or SubagentStop ever fires — the sweep is the only
+  // cleanup path. 60s age threshold leaves real spawns plenty of room
+  // to issue their first tool call before being mistaken for zombies.
+  const ZOMBIE_SWEEP_INTERVAL_MS = 30_000;
+  const ZOMBIE_MAX_AGE_S = 60;
+  const sweepTimer = setInterval(
+    () => lifecycle.sweepZombies(ZOMBIE_MAX_AGE_S),
+    ZOMBIE_SWEEP_INTERVAL_MS,
+  );
+  sweepTimer.unref();
+
   console.log(
     `[daemon] listening on 127.0.0.1:${config.daemon.port}, stateDir=${stateDir}`,
   );
@@ -65,6 +78,7 @@ async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`[daemon] ${signal} — shutting down`);
+    clearInterval(sweepTimer);
     watchers.closeAll();
     await disk.flushAll();
     await registry.flush();

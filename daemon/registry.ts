@@ -12,7 +12,7 @@
  * run a CLI command before the visualizer notices the repo.
  */
 import path from "node:path";
-import { promises as fs, realpathSync } from "node:fs";
+import { promises as fs, realpathSync, existsSync } from "node:fs";
 import { userReposPath, userDir } from "../lib/user-dirs";
 
 export type RegisteredRepo = {
@@ -56,8 +56,17 @@ export class RepoRegistry {
     }
   }
 
+  /**
+   * Stat-on-read filter: hide entries whose path no longer exists on
+   * disk. Non-destructive — the entry stays in memory and on disk so a
+   * recreated worktree (or a path that did not exist yet at register
+   * time) reappears in the switcher automatically. The cost is a few
+   * `existsSync` calls per /repos request.
+   */
   list(): RegisteredRepo[] {
-    return Array.from(this.repos.values()).sort((a, b) => a.addedAt - b.addedAt);
+    return Array.from(this.repos.values())
+      .filter((r) => existsSync(r.path))
+      .sort((a, b) => a.addedAt - b.addedAt);
   }
 
   has(repoPath: string): boolean {

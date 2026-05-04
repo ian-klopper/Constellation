@@ -44,11 +44,30 @@
       "insight": "Index-based arrow navigation needs a client-side stable sort key — never lean on the order the backend happens to deliver. The daemon's repos() sorts by recency, so every agent touch reshuffles the list and a `(idx + 1) % n` next-pointer silently bounces between repos as activity churns. Backends are free to ship lists in whatever order suits them; the consumer that does positional traversal owns sort stability."
     }
   ],
-  "components/RepoSwitcher.tsx": [
+  "daemon/registry.ts": [
     {
       "date": "2026-05-03",
       "pr": null,
-      "insight": "Index-based arrow navigation needs a client-side stable sort key — never lean on the order the backend happens to deliver. The daemon's repos() sorts by recency, so every agent touch reshuffles the list and a `(idx + 1) % n` next-pointer silently bounces between repos as activity churns. Backends are free to ship lists in whatever order suits them; the consumer that does positional traversal owns sort stability."
+      "insight": "For an auto-touched persistent registry, prefer a stat-on-read filter over delete-from-storage when entries can disappear and reappear. Deleting a worktree that the user later recreates would otherwise force them to re-register; hide-on-read self-heals. The few `existsSync` calls per /repos request are cheap compared to the user-experience cost of stale or wrongly-deleted entries."
+    }
+  ],
+  "daemon/lifecycle.ts": [
+    {
+      "date": "2026-05-03",
+      "pr": null,
+      "insight": "When the user rejects a Claude Code Agent tool spawn at the prompt, agent-start has already fired but no agent-stop or SubagentStop ever will — Claude Code does not (yet) emit a cancellation hook. A periodic TTL sweep is the only reliable cleanup. `lastActiveAt === startedAt` is the cleanest proxy for 'never ran' because every touch path bumps lastActiveAt, but not every touch sets currentPath (Bash/Grep have no file_path)."
+    }
+  ],
+  "hooks/sse-registry.ts": [
+    {
+      "date": "2026-05-03",
+      "pr": null,
+      "insight": "When sharing a long-lived connection across hook instances with refcounting, give the close path a small grace period (≈100 ms) before tearing down. React 19 StrictMode dev double-mounts and brief route-transition unmount/remounts both flicker refcount through zero — without the grace period you pay reconnect cost on every legitimate consumer remount."
+    },
+    {
+      "date": "2026-05-03",
+      "pr": null,
+      "insight": "Cache the most recent payload per (url, event) at the registry level and replay synchronously to new subscribers. The daemon's SseBroker already replays current state on connect, but a *second* hook subscribing to an existing shared connection won't get a fresh on-connect snapshot — the cache is what closes that gap. Without it, a freshly-mounted component stares at empty state until the next event."
     }
   ]
 }

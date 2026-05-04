@@ -13,6 +13,8 @@ export type AgentColors = {
   ringClass: string;
   /** Tailwind bg-* class for the animated ping ring. */
   pingClass: string;
+  /** Tailwind border-* class so accents (e.g. ThoughtBubble's left edge) can match the ring. */
+  borderClass: string;
   /** Raw CSS rgb() string for SVG stroke / JS box-shadow. */
   fillRgb: string;
 };
@@ -28,6 +30,7 @@ export function agentColor(a: {
     return {
       ringClass: "bg-sky-500",
       pingClass: "bg-sky-400",
+      borderClass: "border-sky-500",
       fillRgb: "rgb(14 165 233)", // sky-500
     };
   }
@@ -35,12 +38,14 @@ export function agentColor(a: {
     return {
       ringClass: "bg-amber-500",
       pingClass: "bg-amber-400",
+      borderClass: "border-amber-500",
       fillRgb: "rgb(245 158 11)", // amber-500
     };
   }
   return {
     ringClass: "bg-emerald-500",
     pingClass: "bg-emerald-400",
+    borderClass: "border-emerald-500",
     fillRgb: "rgb(16 185 129)", // emerald-500
   };
 }

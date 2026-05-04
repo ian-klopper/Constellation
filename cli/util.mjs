@@ -2,6 +2,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
+import { createConnection } from "node:net";
 import os from "node:os";
 import path from "node:path";
 
@@ -147,6 +148,25 @@ export async function postDaemonNoThrow(installRoot, route, body, { timeoutMs = 
   } catch {
     // Daemon down or slow — describe still works, just no live updates.
   }
+}
+
+// TCP probe — returns true iff something is listening on 127.0.0.1:<port>.
+// Cheap signal that a service is up without doing a full HTTP roundtrip
+// (Next.js can take a beat to answer the very first request after boot).
+export function probePort(port, timeoutMs = 500) {
+  return new Promise((resolve) => {
+    const sock = createConnection({ host: "127.0.0.1", port, timeout: timeoutMs });
+    let settled = false;
+    const finish = (up) => {
+      if (settled) return;
+      settled = true;
+      sock.destroy();
+      resolve(up);
+    };
+    sock.once("connect", () => finish(true));
+    sock.once("timeout", () => finish(false));
+    sock.once("error", () => finish(false));
+  });
 }
 
 export function relTime(unixSeconds) {

@@ -30,7 +30,15 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { userDir, userLogPath, userWebLogPath } from "./util.mjs";
+import { setTimeout as sleep } from "node:timers/promises";
+import {
+  getDaemon,
+  loadConfig,
+  probePort,
+  userDir,
+  userLogPath,
+  userWebLogPath,
+} from "./util.mjs";
 
 // Order matters: start daemon first (web SSR fetches /api/agents which
 // proxies the daemon), stop in reverse so the web tier doesn't briefly
@@ -77,8 +85,8 @@ export default async function service({ installRoot, args }) {
     console.error("Usage: constellation service install | uninstall");
     return 64;
   }
-  if (cmd === "start") return start();
-  if (cmd === "stop") return stop();
+  if (cmd === "start") return start(installRoot);
+  if (cmd === "stop") return stop(installRoot);
   console.error(`Internal: unknown service entry "${cmd}"`);
   return 1;
 }
@@ -169,38 +177,137 @@ async function uninstall() {
   return 0;
 }
 
-function start() {
-  if (!macOnly("start")) return 1;
-  let anyMissing = false;
-  for (const svc of SERVICES) {
-    const dest = plistPathFor(svc.label);
-    if (!existsSync(dest)) {
-      console.error(
-        `No plist at ${dest}. Run \`constellation service install\` first.`,
-      );
-      anyMissing = true;
-      continue;
-    }
-    const r = spawnSync("launchctl", ["load", "-w", dest], {
-      stdio: ["ignore", "inherit", "inherit"],
-    });
-    if (r.status !== 0) return r.status ?? 1;
+// Poll `check` every intervalMs until it resolves truthy or timeoutMs
+// elapses. Used by start/stop to confirm services actually came up or
+// went down — `launchctl load` returning 0 only means the plist was
+// registered, not that the process is listening.
+async function waitFor(check, { timeoutMs, intervalMs }) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await check()) return true;
+    await sleep(intervalMs);
   }
-  return anyMissing ? 1 : 0;
+  return false;
 }
 
-function stop() {
+async function start(installRoot) {
+  if (!macOnly("start")) return 1;
+
+  // First-run convenience: if any plist is missing, run `service install`
+  // for the user instead of erroring out. install() is idempotent and
+  // already runs `launchctl load -w` itself, so we skip the load loop
+  // below and go straight to verification.
+  const anyMissing = SERVICES.some((svc) => !existsSync(plistPathFor(svc.label)));
+  let autoInstalled = false;
+  if (anyMissing) {
+    console.log("! Launchd plists missing — running `service install` first…");
+    const code = await install(installRoot);
+    if (code !== 0) return code;
+    autoInstalled = true;
+  } else {
+    for (const svc of SERVICES) {
+      const dest = plistPathFor(svc.label);
+      const r = spawnSync("launchctl", ["load", "-w", dest], {
+        stdio: ["ignore", "inherit", "inherit"],
+      });
+      if (r.status !== 0) {
+        console.error(`! launchctl load ${svc.label} exited ${r.status}`);
+        return r.status ?? 1;
+      }
+      console.log(`✓ Loaded ${svc.label}`);
+    }
+  }
+
+  // launchctl load returned 0, but that only means the plist registered —
+  // the actual process may still be booting (or crash-looping under
+  // KeepAlive). Poll each port until it answers, so the immediate-next
+  // `constellation open` reaches a live web tier.
+  const config = loadConfig(installRoot);
+
+  const daemonUp = await waitFor(
+    async () => {
+      try {
+        await getDaemon(installRoot, "/health", { timeoutMs: 500 });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { timeoutMs: 10_000, intervalMs: 250 },
+  );
+  if (!daemonUp) {
+    console.error(
+      `! Daemon did not respond on :${config.daemon.port} within 10s. ` +
+        `Check ${userLogPath()}.`,
+    );
+    return 1;
+  }
+  console.log(`✓ Daemon listening on :${config.daemon.port}`);
+
+  const webUp = await waitFor(() => probePort(config.web.port), {
+    timeoutMs: 15_000,
+    intervalMs: 250,
+  });
+  if (!webUp) {
+    console.error(
+      `! Visualizer did not come up on :${config.web.port} within 15s. ` +
+        `Check ${userWebLogPath()}.`,
+    );
+    return 1;
+  }
+  console.log(`✓ Visualizer listening on :${config.web.port}`);
+
+  // install() already prints its own "Constellation is now running"
+  // summary, so skip ours on the auto-install path to avoid two summaries.
+  if (!autoInstalled) {
+    console.log("");
+    console.log(
+      "Constellation is running. Open the visualizer with `constellation open`.",
+    );
+  }
+  return 0;
+}
+
+async function stop(installRoot) {
   if (!macOnly("stop")) return 1;
   // Reverse order — see uninstall().
   for (const svc of [...SERVICES].reverse()) {
     const dest = plistPathFor(svc.label);
     if (!existsSync(dest)) {
-      console.error(`No plist at ${dest}.`);
+      console.log(`· No plist at ${dest}, skipping.`);
       continue;
     }
     spawnSync("launchctl", ["unload", "-w", dest], {
       stdio: ["ignore", "inherit", "inherit"],
     });
+    console.log(`✓ Unloaded ${svc.label}`);
   }
-  return 0;
+
+  // Confirm both ports actually released. KeepAlive is off after `unload
+  // -w`, so this should resolve fast — we mostly want a clear "stopped"
+  // signal so the user knows the next `start` is safe.
+  const config = loadConfig(installRoot);
+  const webDown = await waitFor(
+    async () => !(await probePort(config.web.port)),
+    { timeoutMs: 5_000, intervalMs: 250 },
+  );
+  if (webDown) {
+    console.log("✓ Visualizer stopped.");
+  } else {
+    console.error(`! Visualizer still listening on :${config.web.port} after 5s.`);
+  }
+
+  const daemonDown = await waitFor(
+    async () => !(await probePort(config.daemon.port)),
+    { timeoutMs: 5_000, intervalMs: 250 },
+  );
+  if (daemonDown) {
+    console.log("✓ Daemon stopped.");
+  } else {
+    console.error(`! Daemon still listening on :${config.daemon.port} after 5s.`);
+  }
+
+  console.log("");
+  console.log("Constellation stopped.");
+  return webDown && daemonDown ? 0 : 1;
 }

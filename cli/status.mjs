@@ -1,11 +1,11 @@
 // `constellation status` — daemon health + brief stats.
 import { existsSync, readFileSync } from "node:fs";
-import { createConnection } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import {
   getDaemon,
   loadConfig,
+  probePort,
   userLogPath,
   userPidPath,
   userWebLogPath,
@@ -17,25 +17,6 @@ import {
 const PLIST_LABELS = ["com.constellation.daemon", "com.constellation.web"];
 function plistPathFor(label) {
   return path.join(os.homedir(), "Library/LaunchAgents", `${label}.plist`);
-}
-
-// TCP probe — returns true iff something is listening on 127.0.0.1:<port>.
-// Cheap signal that the web tier is up without doing a full HTTP roundtrip
-// (Next.js can take a beat to answer the very first request after boot).
-function probePort(port, timeoutMs = 500) {
-  return new Promise((resolve) => {
-    const sock = createConnection({ host: "127.0.0.1", port, timeout: timeoutMs });
-    let settled = false;
-    const finish = (up) => {
-      if (settled) return;
-      settled = true;
-      sock.destroy();
-      resolve(up);
-    };
-    sock.once("connect", () => finish(true));
-    sock.once("timeout", () => finish(false));
-    sock.once("error", () => finish(false));
-  });
 }
 
 export default async function status({ installRoot }) {

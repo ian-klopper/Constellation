@@ -36,7 +36,6 @@ import {
 import { TileRegistryProvider } from "./TileRegistry";
 import { AgentOverlay } from "./AgentOverlay";
 import { ConstellationOverlay } from "./ConstellationOverlay";
-import { EditingHighlightProvider } from "./EditingHighlightContext";
 import { PinController } from "./PinController";
 import {
   ZoomPanContext,
@@ -234,7 +233,7 @@ export function Visualizer({
       // their own pointer-handling owns those events (X close button, icon
       // click, text selection).
       const target = e.target instanceof Element ? e.target : null;
-      if (target?.closest("[data-hover-panel],[data-agent-overlay]")) return;
+      if (target?.closest("[data-hover-panel],[data-agent-overlay],[data-agent-rail]")) return;
       state = "pressed";
       downX = e.clientX;
       downY = e.clientY;
@@ -464,7 +463,6 @@ export function Visualizer({
   return (
     <HoverContext.Provider value={hoverValue}>
       <TileRegistryProvider>
-        <EditingHighlightProvider root={root}>
           <ZoomPanContext.Provider value={zoomPanValue}>
             {/*
               Container holds the transformed wrapper *and* HoverPanel as
@@ -509,10 +507,9 @@ export function Visualizer({
             {/* Constellation paints first (z-40) so AgentOverlay icons
                 (z-50) sit on top of the trail endpoints. */}
             <ConstellationOverlay root={root} />
-            <AgentOverlay root={root} />
+            <AgentOverlay root={root} container={containerRef.current} />
             <PinController />
           </ZoomPanContext.Provider>
-        </EditingHighlightProvider>
       </TileRegistryProvider>
     </HoverContext.Provider>
   );

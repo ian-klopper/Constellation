@@ -76,6 +76,7 @@ export function PinController() {
       if (target.closest("[data-path]")) return;
       if (target.closest("[data-hover-panel]")) return;
       if (target.closest("[data-agent-overlay]")) return;
+      if (target.closest("[data-agent-rail]")) return;
       setPinned(null);
     };
     window.addEventListener("pointerdown", onDown);

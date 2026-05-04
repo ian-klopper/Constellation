@@ -64,19 +64,24 @@ if (!existsSync(nextBin)) {
 
 console.log(`[web] starting next start -p ${port} (cwd ${INSTALL_ROOT})`);
 
+// detached:true puts the child in its own process group so we can signal
+// the whole tree on shutdown. `next start` spawns a `next-server` grandchild
+// that doesn't propagate SIGTERM from its parent, so signaling only the
+// direct child orphans next-server and leaves the port bound after launchctl
+// unload — exactly the "stop says success but visualizer still listening"
+// failure mode. process.kill(-pid, sig) signals the whole group.
 const child = spawn(nextBin, ["start", "-p", String(port)], {
   cwd: INSTALL_ROOT,
   stdio: "inherit",
   env: { ...process.env, NODE_ENV: "production" },
+  detached: true,
 });
 
 const forward = (sig) => {
-  if (!child.killed) {
-    try {
-      child.kill(sig);
-    } catch {
-      /* ignore — child may already be dead */
-    }
+  try {
+    process.kill(-child.pid, sig);
+  } catch {
+    /* group may already be gone */
   }
 };
 process.on("SIGTERM", () => forward("SIGTERM"));

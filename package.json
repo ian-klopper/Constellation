@@ -11,7 +11,7 @@
     "daemon": "tsx daemon/index.ts",
     "build": "npm run build:daemon && npm run build:web",
     "build:daemon": "tsc -p tsconfig.daemon.json",
-    "build:web": "next build",
+    "build:web": "next build && node ./scripts/bounce-web-if-stale.mjs",
     "start": "next start",
     "lint": "next lint"
   },

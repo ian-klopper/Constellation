@@ -491,23 +491,42 @@ export class Lifecycle {
   }
 
   /**
-   * Reap subagent entries that were created by `agent-start` but never
-   * received a single tool-use touch. The most common cause is a human
-   * rejecting an `Agent` tool spawn at the Claude Code prompt — no
-   * agent-stop or SubagentStop fires for a rejected spawn, so the
-   * entry would otherwise stick forever. `lastActiveAt === startedAt`
-   * is the reliable proxy for "never ran" since handleTouch always
-   * bumps lastActiveAt. Skips main and background agents (the latter
-   * are reaped by SubagentStop via agentId match).
+   * Reap two kinds of stuck entries:
+   *
+   * 1. Subagent zombies — `agent-start` fired but no tool-use touch ever
+   *    followed. Most often a human rejected the Agent spawn at the
+   *    prompt; Claude Code emits no cancellation hook, so the entry
+   *    would otherwise stick forever. `lastActiveAt === startedAt` is
+   *    the reliable proxy for "never ran" since handleTouch always
+   *    bumps lastActiveAt. Background agents are not reaped here —
+   *    they're cleaned up by SubagentStop via agentId match.
+   *
+   * 2. Idle main zombies — Claude Code never fires a "session ended"
+   *    event, so when the user closes their terminal the main agent
+   *    just goes idle and stays in state forever, accumulating one
+   *    __main.json per `claude` invocation. We reap idle mains whose
+   *    lastActiveAt is older than `mainIdleAgeSeconds`. If the user
+   *    actually returns to that session, the next touch event lazily
+   *    recreates the entry from scratch — no special resurrection
+   *    logic needed.
    */
-  sweepZombies(maxAgeSeconds: number): void {
+  sweepZombies(
+    subagentMaxAgeSeconds: number,
+    mainIdleAgeSeconds: number,
+  ): void {
     const now = nowSeconds();
     const toRemove: string[] = [];
     for (const [key, agent] of this.agents) {
-      if (agent.id === "main") continue;
+      if (agent.id === "main") {
+        if (agent.status !== "idle") continue;
+        const lastActive = agent.lastActiveAt ?? agent.startedAt;
+        if (now - lastActive < mainIdleAgeSeconds) continue;
+        toRemove.push(key);
+        continue;
+      }
       if (agent.kind !== "foreground") continue;
       if (agent.lastActiveAt !== agent.startedAt) continue;
-      if (now - agent.startedAt < maxAgeSeconds) continue;
+      if (now - agent.startedAt < subagentMaxAgeSeconds) continue;
       toRemove.push(key);
     }
     if (toRemove.length === 0) return;

@@ -78,18 +78,28 @@ body {
   }
 }
 
-/* Live edit-pulse: applied by TreemapNode whenever an active agent's
-   currentTool is Edit/Write/MultiEdit and currentPath matches this tile.
-   Stacks on top of any base hover/pin state — the amber outline + soft
-   pulsing glow read as "work happening here right now" without fighting
-   the bg-color tints that the .tile-input/.tile-output classes use. */
-@keyframes constellation-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgb(245 158 11 / 0); }
-  50%      { box-shadow: 0 0 0 4px rgb(245 158 11 / 0.35); }
-}
-.tile-editing {
-  outline: 1px solid rgb(245 158 11 / 0.65); /* amber-500 */
-  outline-offset: -1px;
-  animation: constellation-pulse 1.6s ease-in-out infinite;
+/* Universal tile-activity fade: applied by TreemapNode for every tool
+   touch across all agents (Read, Bash, Grep, Edit, Write, etc.), not just
+   edits. The JS-computed box-shadow decays over TILE_TOUCH.FADE_MS (6s)
+   in 200ms steps; the 200ms CSS transition matches the tick interval so
+   each step interpolates smoothly into the next with no lag. The edit
+   variant adds a solid outline so edits read as more emphatic than reads. */
+.tile-touched {
+  color: var(--tile-touch-color, rgb(245 158 11));
+  box-shadow: var(--tile-touch-shadow, none);
+  transition: box-shadow 200ms linear;
   z-index: 8;
+}
+.tile-touched-edit {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tile-touched { transition: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-constellation-overlay] path {
+    transition: none !important;
+  }
 }

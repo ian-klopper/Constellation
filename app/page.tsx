@@ -6,14 +6,29 @@
  * self-dev) when the param is missing or invalid.
  */
 import path from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+
+const BUILD_ID = (() => {
+  try {
+    return readFileSync(
+      path.join(process.cwd(), ".next", "BUILD_ID"),
+      "utf8",
+    )
+      .trim()
+      .slice(0, 6);
+  } catch {
+    return "dev";
+  }
+})();
 import { scanProject, countTree } from "@/lib/scan";
 import { Visualizer } from "@/components/Visualizer";
 import { RepoSwitcher } from "@/components/RepoSwitcher";
 import { DetailSlider } from "@/components/DetailSlider";
 import { LiveDescriptionsBridge } from "@/components/LiveDescriptionsContext";
 import { RoadmapToggle } from "@/components/RoadmapToggle";
-import { fetchRepos } from "@/lib/daemon-client";
+import { fetchRepos, fetchAgents } from "@/lib/daemon-client";
+import { AgentRail } from "@/components/AgentRail";
+import { TileActivityProvider } from "@/hooks/useTileActivity";
 import { readRoadmap } from "@/lib/roadmap";
 import { listWorktrees } from "@/lib/worktrees";
 import type { RepoSummary } from "@/lib/types";
@@ -29,10 +44,11 @@ export default async function HomePage({
   const requested = Array.isArray(params.repo) ? params.repo[0] : params.repo;
   const root = resolveRequestedRoot(requested, process.cwd());
 
-  const [tree, daemonRepos, roadmap] = await Promise.all([
+  const [tree, daemonRepos, roadmap, initialAgents] = await Promise.all([
     scanProject(root),
     fetchRepos(),
     readRoadmap(root),
+    fetchAgents(),
   ]);
   const stats = countTree(tree.tree);
   const worktreePaths = listWorktrees(root);
@@ -46,15 +62,20 @@ export default async function HomePage({
           <DetailSlider />
           {roadmap && <RoadmapToggle data={roadmap} />}
           <span className="text-right">
-            {stats.dirs} directories · {stats.files} files · {stats.lines} lines
+            {BUILD_ID} · {initialAgents.length} agents · {stats.dirs} directories · {stats.files} files · {stats.lines} lines
           </span>
         </div>
       </header>
-      <div className="min-h-0 flex-1">
-        <LiveDescriptionsBridge root={root}>
-          <Visualizer tree={tree} root={root} />
-        </LiveDescriptionsBridge>
-      </div>
+      <TileActivityProvider root={root} initialAgents={initialAgents}>
+        <div className="flex min-h-0 flex-1">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <LiveDescriptionsBridge root={root}>
+              <Visualizer tree={tree} root={root} />
+            </LiveDescriptionsBridge>
+          </div>
+          <AgentRail root={root} initialAgents={initialAgents} />
+        </div>
+      </TileActivityProvider>
     </main>
   );
 }

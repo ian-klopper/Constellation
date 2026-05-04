@@ -56,15 +56,21 @@ async function main() {
 
   const server = startServer(config.daemon.port, lifecycle, sse, registry, descriptions);
 
-  // Reap rejected-Agent zombie entries every 30s. PreToolUse on Agent
-  // creates a lifecycle entry, but if the user rejects the spawn, no
-  // agent-stop or SubagentStop ever fires — the sweep is the only
-  // cleanup path. 60s age threshold leaves real spawns plenty of room
-  // to issue their first tool call before being mistaken for zombies.
+  // Reap zombie entries every 30s. Two cleanup paths share this sweep:
+  //   - rejected-Agent subagents (60s threshold — leaves real spawns
+  //     plenty of room to issue their first tool call)
+  //   - idle main agents whose session went silent (config.agentTtlSeconds,
+  //     default 1800s = 30min — Claude Code emits no session-end event,
+  //     so without this every `claude` invocation leaks a __main.json
+  //     and the visualizer accumulates ghost dots over time)
   const ZOMBIE_SWEEP_INTERVAL_MS = 30_000;
-  const ZOMBIE_MAX_AGE_S = 60;
+  const ZOMBIE_SUBAGENT_MAX_AGE_S = 60;
   const sweepTimer = setInterval(
-    () => lifecycle.sweepZombies(ZOMBIE_MAX_AGE_S),
+    () =>
+      lifecycle.sweepZombies(
+        ZOMBIE_SUBAGENT_MAX_AGE_S,
+        config.agentTtlSeconds,
+      ),
     ZOMBIE_SWEEP_INTERVAL_MS,
   );
   sweepTimer.unref();

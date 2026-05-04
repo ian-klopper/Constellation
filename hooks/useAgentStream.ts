@@ -13,8 +13,12 @@ import { subscribeSSE, fetchOnce } from "./sse-registry";
 
 const EMPTY: AgentsPayload = { agents: [], repos: [] };
 
-export function useAgentStream(): AgentsPayload {
-  const [snapshot, setSnapshot] = useState<AgentsPayload>(EMPTY);
+export function useAgentStream(initialAgents?: ActiveAgent[]): AgentsPayload {
+  const [snapshot, setSnapshot] = useState<AgentsPayload>(() =>
+    initialAgents && initialAgents.length > 0
+      ? { agents: initialAgents, repos: [] }
+      : EMPTY,
+  );
 
   useEffect(() => {
     let cancelled = false;

@@ -26,8 +26,10 @@ Repo management:
 Service control:
   status              Print daemon + visualizer health, registered repo
                       count, log paths.
-  start               Load both launchd agents (daemon + visualizer) (Mac).
-  stop                Unload both launchd agents (Mac).
+  start               Start the Constellation daemon and visualizer.
+                      Auto-installs launchd agents on first run, then
+                      waits until both ports are listening (Mac).
+  stop                Stop the Constellation daemon and visualizer (Mac).
   service install     Install both launchd plists + run them at login.
   service uninstall   Tear down both launchd plists.
   logs [-f] [--web]   Print (or tail) the daemon log; pass --web for the

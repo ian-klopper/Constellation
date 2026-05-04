@@ -29,7 +29,7 @@ export type DisplayAgent = ActiveAgent & {
 };
 
 export function useAgentLifecycle(snapshot: ActiveAgent[]): DisplayAgent[] {
-  const [agents, setAgents] = useState<DisplayAgent[]>([]);
+  const [agents, setAgents] = useState<DisplayAgent[]>(() => merge([], snapshot));
 
   useEffect(() => {
     setAgents((prev) => merge(prev, snapshot));

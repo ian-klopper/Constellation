@@ -25,12 +25,15 @@ export type FossilAgent = ActiveAgent & {
   fossilStart?: number;
 };
 
-export function useFossilizedAgents(snapshot: ActiveAgent[]): FossilAgent[] {
-  const [agents, setAgents] = useState<FossilAgent[]>([]);
+export function useFossilizedAgents(
+  snapshot: ActiveAgent[],
+  lifetimeMs: number = CONSTELLATION.FOSSIL_LIFETIME_MS,
+): FossilAgent[] {
+  const [agents, setAgents] = useState<FossilAgent[]>(() => merge([], snapshot, lifetimeMs));
 
   useEffect(() => {
-    setAgents((prev) => merge(prev, snapshot));
-  }, [snapshot]);
+    setAgents((prev) => merge(prev, snapshot, lifetimeMs));
+  }, [snapshot, lifetimeMs]);
 
   // Reap fossils whose lifetime has elapsed. Re-checked whenever the list
   // changes; one timer per re-render is fine because the list churn rate
@@ -39,22 +42,25 @@ export function useFossilizedAgents(snapshot: ActiveAgent[]): FossilAgent[] {
     const fossils = agents.filter((a) => a.fossilStart !== undefined);
     if (fossils.length === 0) return;
     const id = setTimeout(() => {
-      const cutoff = Date.now() - CONSTELLATION.FOSSIL_LIFETIME_MS;
+      const cutoff = Date.now() - lifetimeMs;
       setAgents((prev) =>
         prev.filter(
           (a) => a.fossilStart === undefined || a.fossilStart >= cutoff,
         ),
       );
-    }, CONSTELLATION.FOSSIL_LIFETIME_MS + 200);
+    }, lifetimeMs + 200);
     return () => clearTimeout(id);
-  }, [agents]);
+  }, [agents, lifetimeMs]);
 
   return agents;
 }
 
-function merge(prev: FossilAgent[], next: ActiveAgent[]): FossilAgent[] {
+function merge(
+  prev: FossilAgent[],
+  next: ActiveAgent[],
+  lifetimeMs: number,
+): FossilAgent[] {
   const now = Date.now();
-  const prevByKey = new Map(prev.map((a) => [a.key, a]));
   const nextKeys = new Set(next.map(keyOf));
 
   const merged: FossilAgent[] = next.map((a) => ({
@@ -66,7 +72,7 @@ function merge(prev: FossilAgent[], next: ActiveAgent[]): FossilAgent[] {
   for (const a of prev) {
     if (nextKeys.has(a.key)) continue;
     const fossilStart = a.fossilStart ?? now;
-    if (now - fossilStart >= CONSTELLATION.FOSSIL_LIFETIME_MS) continue;
+    if (now - fossilStart >= lifetimeMs) continue;
     merged.push({ ...a, fossilStart });
   }
 

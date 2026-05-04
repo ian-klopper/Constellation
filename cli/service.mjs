@@ -207,6 +207,11 @@ async function start(installRoot) {
   } else {
     for (const svc of SERVICES) {
       const dest = plistPathFor(svc.label);
+      // Pre-unload so re-loading an already-loaded plist doesn't print
+      // `Load failed: 5: Input/output error` to stderr (which reads as
+      // a hard failure even though launchctl exits 0). Same pattern as
+      // install() — see the comment in that function.
+      spawnSync("launchctl", ["unload", dest], { stdio: "ignore" });
       const r = spawnSync("launchctl", ["load", "-w", dest], {
         stdio: ["ignore", "inherit", "inherit"],
       });

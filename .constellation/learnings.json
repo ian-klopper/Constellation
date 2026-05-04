@@ -49,6 +49,18 @@
       "date": "2026-05-03",
       "pr": null,
       "insight": "`launchctl load -w` returning 0 only means the plist registered — not that the process is listening. KeepAlive can mask a crash-loop by re-spawning a doomed child indefinitely, and the immediate-next CLI call (e.g. `constellation open`) hits a port that nothing accepted yet. Any user-facing `start`-style command needs a post-load poll (TCP probe or cheap HTTP health) with a timeout, otherwise success-exit means nothing to the user."
+    },
+    {
+      "date": "2026-05-03",
+      "pr": null,
+      "insight": "`launchctl load` on an already-loaded plist exits 0 *and* prints `Load failed: 5: Input/output error` to stderr — the noise reads as a hard failure to users even though everything is fine. Always pre-unload (`launchctl unload`, stdio ignored) before load if you may be hitting a service that auto-started at login under RunAtLoad."
+    }
+  ],
+  "scripts/web-server.mjs": [
+    {
+      "date": "2026-05-03",
+      "pr": null,
+      "insight": "`next start` forks a `next-server` grandchild that does NOT receive SIGTERM forwarded only to the direct child — the grandchild orphans and keeps the port bound after launchctl unload, so `constellation stop` reports success while `:47318` is still listening. Fix: spawn `next start` with `detached:true` (its own process group) and on shutdown send `process.kill(-child.pid, sig)` to signal the whole group. Same trick works for any wrapper that shells into a tool that itself spawns long-lived workers (gunicorn, pm2, supervisord-as-child, etc.)."
     }
   ]
 }

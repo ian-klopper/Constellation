@@ -52,25 +52,19 @@ async function main() {
     stopWatchersFor: (key) => watchers.stopFor(key),
   });
 
-  await lifecycle.loadFromDisk(stateDir);
+  await lifecycle.loadFromDisk(stateDir, config.staleAgentSeconds);
 
   const server = startServer(config.daemon.port, lifecycle, sse, registry, descriptions);
 
-  // Reap zombie entries every 30s. Two cleanup paths share this sweep:
-  //   - rejected-Agent subagents (60s threshold — leaves real spawns
-  //     plenty of room to issue their first tool call)
-  //   - idle main agents whose session went silent (config.agentTtlSeconds,
-  //     default 1800s = 30min — Claude Code emits no session-end event,
-  //     so without this every `claude` invocation leaks a __main.json
-  //     and the visualizer accumulates ghost dots over time)
-  const ZOMBIE_SWEEP_INTERVAL_MS = 30_000;
-  const ZOMBIE_SUBAGENT_MAX_AGE_S = 60;
+  // Sweep stale entries every 10s. One unified rule: any agent whose
+  // lastActiveAt is older than `staleAgentSeconds` is reaped — kind /
+  // status / id don't matter. Pairs with handleTouch's lazy resurrection
+  // so an over-eager reap is harmless: the moment the user does anything
+  // again, the entry comes back. Worst-case bound for "agent crashed,
+  // rail still shows it" = staleAgentSeconds + sweep interval.
+  const ZOMBIE_SWEEP_INTERVAL_MS = 10_000;
   const sweepTimer = setInterval(
-    () =>
-      lifecycle.sweepZombies(
-        ZOMBIE_SUBAGENT_MAX_AGE_S,
-        config.agentTtlSeconds,
-      ),
+    () => lifecycle.sweepZombies(config.staleAgentSeconds),
     ZOMBIE_SWEEP_INTERVAL_MS,
   );
   sweepTimer.unref();

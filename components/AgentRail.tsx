@@ -1,26 +1,27 @@
 /**
- * The permanent right-side activity panel. Shows one row per live or
- * recently-finished agent with a colored dot, current tool and file,
- * and up to three lines of the agent's latest thought. Overlap between
- * agents is structurally impossible because rows stack vertically inside
- * an overflow-y-auto container — there is no viewport edge for a bubble
- * to fall off. Collapses to a narrow strip with a vertical "ACTIVITY"
- * label when no agents are present so the visualizer canvas keeps its
- * full width during idle periods.
+ * The permanent right-side activity panel. Shows one row per live
+ * agent with a colored dot, current tool and file, and up to three
+ * lines of the agent's latest thought. The count in the header
+ * reflects only what is actually running right now — when the daemon
+ * removes an agent (clean Stop or stale-sweep), the row fades out via
+ * useAgentLifecycle's 400ms removingAt window and the count drops.
+ * Fossil-trail rendering belongs to ConstellationOverlay, not here.
+ *
+ * Collapses to a narrow strip with a vertical "ACTIVITY" label when
+ * no agents are present so the visualizer canvas keeps its full
+ * width during idle periods.
  */
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { RAIL, OVERLAY_TIMING } from "@/lib/constants";
+import { RAIL } from "@/lib/constants";
 import { useAgentStream } from "@/hooks/useAgentStream";
 import { useAgentLifecycle } from "@/hooks/useAgentLifecycle";
-import { useFossilizedAgents, type FossilAgent } from "@/hooks/useFossilizedAgents";
 import { useIdleClock } from "@/hooks/useIdleClock";
 import { AgentRailRow } from "./AgentRailRow";
 import type { ActiveAgent } from "@/lib/types";
 
-const { FOSSIL_LIFETIME_MS, WIDTH, COLLAPSED_WIDTH, EXPAND_MS } = RAIL;
-const { IDLE_DEBOUNCE_MS } = OVERLAY_TIMING;
+const { WIDTH, COLLAPSED_WIDTH, EXPAND_MS } = RAIL;
 
 export function AgentRail({
   root,
@@ -37,31 +38,18 @@ export function AgentRail({
   );
 
   // useAgentLifecycle gives us mountedAt / removingAt for fade tracking.
-  const liveAgents = useAgentLifecycle(filtered);
-
-  // useFossilizedAgents keeps finished agents around for FOSSIL_LIFETIME_MS
-  // so recently-finished rows linger briefly before disappearing.
-  const fossilAgents = useFossilizedAgents(filtered, FOSSIL_LIFETIME_MS);
+  // Its 400ms removingAt window is the only fade-out the rail needs —
+  // fossils belong to the trail overlay, not the rail.
+  const lifecycleAgents = useAgentLifecycle(filtered);
 
   const now = useIdleClock();
 
-  // Build a unified display list: live agents first (sorted by startedAt
-  // desc so newest is at the top), then fossils not already in live.
-  const liveKeys = useMemo(
-    () => new Set(liveAgents.map((a) => a.key)),
-    [liveAgents],
+  const liveAgents = useMemo(
+    () => [...lifecycleAgents].sort((a, b) => b.startedAt - a.startedAt),
+    [lifecycleAgents],
   );
 
-  const displayAgents = useMemo(() => {
-    const live = [...liveAgents].sort((a, b) => b.startedAt - a.startedAt);
-    const fossils = fossilAgents.filter(
-      (a) => !liveKeys.has(a.key) && a.fossilStart !== undefined,
-    );
-    return { live, fossils };
-  }, [liveAgents, fossilAgents, liveKeys]);
-
-  const isEmpty =
-    displayAgents.live.length === 0 && displayAgents.fossils.length === 0;
+  const isEmpty = liveAgents.length === 0;
 
   // ---- Auto-scroll to most-recently-mutated agent ----
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -75,7 +63,7 @@ export function AgentRail({
     let mostRecentKey: string | null = null;
     let mostRecentTs = -Infinity;
 
-    for (const a of displayAgents.live) {
+    for (const a of liveAgents) {
       const ts = a.lastActiveAt ?? a.startedAt;
       const prev = prevLastActiveRef.current.get(a.key) ?? -1;
       if (ts > prev && ts > mostRecentTs) {
@@ -86,7 +74,7 @@ export function AgentRail({
 
     // Update the ref map for next comparison.
     prevLastActiveRef.current = new Map(
-      displayAgents.live.map((a) => [a.key, a.lastActiveAt ?? a.startedAt]),
+      liveAgents.map((a) => [a.key, a.lastActiveAt ?? a.startedAt]),
     );
 
     if (!mostRecentKey) return;
@@ -96,15 +84,7 @@ export function AgentRail({
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
-  }, [displayAgents.live]);
-
-  // ---- Fossil opacity helper ----
-  function fossilOpacity(a: FossilAgent): number {
-    if (a.fossilStart === undefined) return 1;
-    const elapsed = now - a.fossilStart;
-    if (elapsed >= FOSSIL_LIFETIME_MS) return 0;
-    return 1 - elapsed / FOSSIL_LIFETIME_MS;
-  }
+  }, [liveAgents]);
 
   return (
     <aside
@@ -140,7 +120,7 @@ export function AgentRail({
               Activity
             </span>
             <span className="ml-auto tabular-nums text-[10px] text-zinc-400">
-              {displayAgents.live.length + displayAgents.fossils.length}
+              {liveAgents.length}
             </span>
           </div>
 
@@ -149,18 +129,9 @@ export function AgentRail({
             ref={scrollContainerRef}
             className="flex-1 divide-y divide-zinc-100 overflow-y-auto"
           >
-            {displayAgents.live.map((a) => (
+            {liveAgents.map((a) => (
               <div key={a.key} data-agent-key={a.key}>
                 <AgentRailRow agent={a} now={now} />
-              </div>
-            ))}
-            {displayAgents.fossils.map((a) => (
-              <div key={a.key} data-agent-key={a.key}>
-                <AgentRailRow
-                  agent={a}
-                  now={now}
-                  fossilOpacity={fossilOpacity(a)}
-                />
               </div>
             ))}
           </div>

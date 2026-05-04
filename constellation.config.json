@@ -17,5 +17,5 @@
   "web": {
     "port": 47318
   },
-  "agentTtlSeconds": 1800
+  "staleAgentSeconds": 60
 }

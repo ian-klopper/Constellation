@@ -117,5 +117,12 @@
       "pr": null,
       "insight": "Inline-arrow ref callbacks fire cleanup with null on EVERY render (because the function reference changes), not just on unmount. If your cleanup deletes per-element state, you will silently churn that state every snapshot tick. Either return a cleanup function (React 19), memoize the ref callback per stable key, or simply do not delete in the cleanup branch and prune state elsewhere."
     }
+  ],
+  "components/AgentOverlay.tsx": [
+    {
+      "date": "2026-05-04",
+      "pr": null,
+      "insight": "A child with position: absolute; bottom: 100% must be parented to a fixed-size element, not the outer transform/opacity wrapper. The outer wrapper has willChange:transform,opacity and no fixed height, so a bottom-100% child whose own height affects the parent's height creates a circular sizing dependency. Parent the bubble to the inner ICON_SIZE-square relative div instead — bottom: 100% then resolves to a fixed 28px regardless of bubble height, and opacity still cascades from the outer wrapper through the inner div."
+    }
   ]
 }

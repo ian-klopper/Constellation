@@ -1,7 +1,10 @@
 /**
  * One row in the activity rail — a colored dot, the current tool and
- * file path, and up to three lines of the agent's latest thought. Idle
- * agents dim; fossil agents (recently finished) fade out.
+ * file path, and up to three lines of the agent's latest thought.
+ * Agents that have been silent for STALE_VISUAL_THRESHOLD_S seconds
+ * dim and show a small "silent Xs" hint, warning the user that the
+ * row will be reaped by the daemon's stale sweep shortly. Idle agents
+ * dim the same amount — same UX intent, "not actively doing work".
  */
 "use client";
 
@@ -9,31 +12,28 @@ import { memo } from "react";
 import { OVERLAY, OVERLAY_TIMING, OVERLAY_MOTION } from "@/lib/constants";
 import { agentColor } from "@/lib/agent-colors";
 import type { DisplayAgent } from "@/hooks/useAgentLifecycle";
-import type { FossilAgent } from "@/hooks/useFossilizedAgents";
 import type { ActiveAgent } from "@/lib/types";
 
 const { ICON_SIZE } = OVERLAY;
-const { IDLE_DEBOUNCE_MS } = OVERLAY_TIMING;
+const { IDLE_DEBOUNCE_MS, STALE_VISUAL_THRESHOLD_S } = OVERLAY_TIMING;
 const { OPACITY_MS } = OVERLAY_MOTION;
 
 type Props = {
-  agent: DisplayAgent | FossilAgent;
+  agent: DisplayAgent;
   now: number;
-  fossilOpacity?: number;
 };
 
 export const AgentRailRow = memo(function AgentRailRow({
   agent,
   now,
-  fossilOpacity,
 }: Props) {
-  const isFossil = fossilOpacity !== undefined;
   const idle = isIdle(agent, now);
-  const opacity = isFossil
-    ? fossilOpacity
-    : idle
-      ? 0.55
-      : 1;
+  const silent = Math.max(
+    0,
+    now / 1000 - (agent.lastActiveAt ?? agent.startedAt),
+  );
+  const isStale = silent > STALE_VISUAL_THRESHOLD_S;
+  const opacity = idle || isStale ? 0.55 : 1;
 
   const { ringClass } = agentColor(agent);
 
@@ -84,6 +84,13 @@ export const AgentRailRow = memo(function AgentRailRow({
           >
             {bubbleText}
           </p>
+        )}
+
+        {/* Going-stale warning */}
+        {isStale && (
+          <div className="mt-0.5 text-[10px] text-zinc-400">
+            silent {Math.floor(silent)}s
+          </div>
         )}
       </div>
     </div>

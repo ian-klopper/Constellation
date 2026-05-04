@@ -83,7 +83,7 @@ export async function fetchAgents(): Promise<ActiveAgent[]> {
     if (!result.success) continue;
     const a = result.data;
     const ts = typeof a.lastActiveAt === "number" ? a.lastActiveAt : a.startedAt;
-    if (now - ts > config.agentTtlSeconds) continue;
+    if (now - ts > config.staleAgentSeconds) continue;
     agents.push(a);
   }
   agents.sort((a, b) => a.startedAt - b.startedAt);

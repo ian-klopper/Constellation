@@ -53,19 +53,29 @@ export const OVERLAY = {
   ICON_SIZE: 28,
 } as const;
 
-// Right-side activity rail. Holds one row per live or recently-finished
-// agent with icon + currentTool·currentPath + multi-line thought area.
-// Collapses to COLLAPSED_WIDTH when no agents are present so the
-// visualizer canvas fills the full viewport when the system is idle.
+// Live "thought bubble" anchored above each agent icon on the map. MAX_WIDTH
+// caps horizontal sprawl so a long thought never spans the canvas; HEIGHT is
+// the assumed rendered height used for stack-offset math when N agents share a
+// tile (real height is line-clamped at LINE_CLAMP). GAP is the vertical space
+// between stacked bubbles.
+export const BUBBLE = {
+  MAX_WIDTH: 220,
+  HEIGHT: 36,
+  GAP: 4,
+  LINE_CLAMP: 2,
+} as const;
+
+// Right-side activity rail. Holds one row per live agent with icon +
+// currentTool·currentPath + multi-line thought area. Collapses to
+// COLLAPSED_WIDTH when no agents are present so the visualizer canvas
+// fills the full viewport when the system is idle. The rail's only
+// fade-out is useAgentLifecycle's 400ms removingAt window — fossil
+// trails are a separate ConstellationOverlay concern.
 export const RAIL = {
   WIDTH: 340,
   COLLAPSED_WIDTH: 40,
   ROW_GAP: 8,
   HEADER_HEIGHT: 32,
-  // How long a finished agent's row lingers in the rail before fading.
-  // Shorter than CONSTELLATION.FOSSIL_LIFETIME_MS (30s) — the rail is
-  // a live activity feed, not a history log.
-  FOSSIL_LIFETIME_MS: 4_000,
   EXPAND_MS: 250,
 } as const;
 
@@ -80,6 +90,11 @@ export const OVERLAY_TIMING = {
   MOUNT_FADE_MS: 50,
   // Buffer added to the fade-out cleanup timer.
   REMOVE_FADE_BUFFER_MS: 50,
+  // After this many seconds of silence, an agent in the activity rail
+  // dims and shows a "silent Xs" hint. Half the daemon's reap window
+  // (config.staleAgentSeconds, default 60) so the warning is visible
+  // before the row actually disappears.
+  STALE_VISUAL_THRESHOLD_S: 30,
 } as const;
 
 export const OVERLAY_MOTION = {

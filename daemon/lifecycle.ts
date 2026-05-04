@@ -110,8 +110,17 @@ export class Lifecycle {
     this.hooks = hooks;
   }
 
-  /** Re-hydrate state from any lifecycle files left over from a previous run. */
-  async loadFromDisk(stateDir: string): Promise<void> {
+  /**
+   * Re-hydrate state from any lifecycle files left over from a previous run.
+   * Files whose `lastActiveAt` is older than `staleAgentSeconds` are
+   * unlinked instead of loaded — the same staleness rule as the periodic
+   * sweep, applied at boot so a daemon restart can never resurrect a
+   * crashed-session agent that the sweep would have reaped anyway.
+   */
+  async loadFromDisk(
+    stateDir: string,
+    staleAgentSeconds: number,
+  ): Promise<void> {
     let entries: string[];
     try {
       entries = await fs.readdir(stateDir);
@@ -119,13 +128,24 @@ export class Lifecycle {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
       throw err;
     }
+    const now = nowSeconds();
     for (const name of entries) {
       if (!name.endsWith(".json")) continue;
+      const filePath = path.join(stateDir, name);
       try {
-        const raw = await fs.readFile(path.join(stateDir, name), "utf8");
+        const raw = await fs.readFile(filePath, "utf8");
         const parsed = ActiveAgentSchema.safeParse(JSON.parse(raw));
         if (!parsed.success) continue; // skip pre-multi-repo-format files
         const a = parsed.data;
+        const lastActive = a.lastActiveAt ?? a.startedAt;
+        if (now - lastActive > staleAgentSeconds) {
+          // Drop the stale file instead of loading it. Direct unlink (not
+          // disk.scheduleDelete) is safe here because loadFromDisk runs
+          // before startServer — there's nothing else writing yet, and we
+          // don't need to wait on the 50ms write debounce.
+          await fs.unlink(filePath).catch(() => {});
+          continue;
+        }
         this.agents.set(keyFor(a.sessionId, a.id), a);
       } catch {
         // skip malformed
@@ -427,17 +447,22 @@ export class Lifecycle {
   }
 
   private handleIdle(e: Extract<LifecycleEvent, { type: "idle" }>): void {
-    const now = nowSeconds();
-    if (!e.agent_id || e.hook_event_name === "Stop") {
-      const key = keyFor(e.sessionId, "main");
-      const main = this.agents.get(key);
-      if (main) {
-        const updated = { ...main, status: "idle" as const, lastActiveAt: now };
-        this.agents.set(key, updated);
-        this.disk.scheduleWrite(updated);
-      }
+    // Stop fires at the end of every Claude Code turn. Treat it as
+    // "remove the main agent" rather than "flip to idle" — the rail's
+    // job is to show what's running *now*, and a turn that has ended is
+    // not running. handleTouch lazily recreates the main entry the next
+    // time the user types something, so this is safe.
+    //
+    // Predicate is tightened to `hook_event_name === "Stop"` only — do
+    // not also key on `!e.agent_id`, which could one day match a
+    // non-Stop event from a different hook and silently delete a live
+    // main.
+    if (e.hook_event_name === "Stop") {
+      this.removeAgent(keyFor(e.sessionId, "main"));
       return;
     }
+    const now = nowSeconds();
+    if (!e.agent_id) return;
     const agent = this.findByAgentId(e.sessionId, e.agent_id);
     if (!agent) return;
     const updated = { ...agent, status: "idle" as const, lastActiveAt: now };
@@ -491,42 +516,29 @@ export class Lifecycle {
   }
 
   /**
-   * Reap two kinds of stuck entries:
+   * Reap any agent that has gone silent for longer than
+   * `staleAgentSeconds`, regardless of kind / id / status. Replaces the
+   * old per-shape branches (subagent never-ran, idle main, etc.) with
+   * one rule so the four cases can never disagree.
    *
-   * 1. Subagent zombies — `agent-start` fired but no tool-use touch ever
-   *    followed. Most often a human rejected the Agent spawn at the
-   *    prompt; Claude Code emits no cancellation hook, so the entry
-   *    would otherwise stick forever. `lastActiveAt === startedAt` is
-   *    the reliable proxy for "never ran" since handleTouch always
-   *    bumps lastActiveAt. Background agents are not reaped here —
-   *    they're cleaned up by SubagentStop via agentId match.
+   * Trade-off: with a tight 60s window, an agent that genuinely runs a
+   * single long tool with no intermediate event fires (e.g. `Bash(sleep
+   * 90)`, or a background subagent doing a long thinking pass with no
+   * tool calls) will be reaped and reappear on the next event. This is
+   * the cost of "rail must reflect now" — the user can raise the window
+   * in `~/.constellation/config.json` if they want a longer leash.
    *
-   * 2. Idle main zombies — Claude Code never fires a "session ended"
-   *    event, so when the user closes their terminal the main agent
-   *    just goes idle and stays in state forever, accumulating one
-   *    __main.json per `claude` invocation. We reap idle mains whose
-   *    lastActiveAt is older than `mainIdleAgeSeconds`. If the user
-   *    actually returns to that session, the next touch event lazily
-   *    recreates the entry from scratch — no special resurrection
-   *    logic needed.
+   * Crashes / SIGKILL / abandoned terminals are exactly what this
+   * window is sized for: no Stop event will ever arrive, so the sweep
+   * is the only reliable cleanup. handleTouch lazily resurrects the
+   * main entry if the user comes back — no special revive path needed.
    */
-  sweepZombies(
-    subagentMaxAgeSeconds: number,
-    mainIdleAgeSeconds: number,
-  ): void {
+  sweepZombies(staleAgentSeconds: number): void {
     const now = nowSeconds();
     const toRemove: string[] = [];
     for (const [key, agent] of this.agents) {
-      if (agent.id === "main") {
-        if (agent.status !== "idle") continue;
-        const lastActive = agent.lastActiveAt ?? agent.startedAt;
-        if (now - lastActive < mainIdleAgeSeconds) continue;
-        toRemove.push(key);
-        continue;
-      }
-      if (agent.kind !== "foreground") continue;
-      if (agent.lastActiveAt !== agent.startedAt) continue;
-      if (now - agent.startedAt < subagentMaxAgeSeconds) continue;
+      const lastActive = agent.lastActiveAt ?? agent.startedAt;
+      if (now - lastActive < staleAgentSeconds) continue;
       toRemove.push(key);
     }
     if (toRemove.length === 0) return;

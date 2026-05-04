@@ -86,7 +86,7 @@ export async function GET() {
     }
     const a = result.data;
     const ts = typeof a.lastActiveAt === "number" ? a.lastActiveAt : a.startedAt;
-    if (now - ts > config.agentTtlSeconds) continue;
+    if (now - ts > config.staleAgentSeconds) continue;
     agents.push(a);
   }
 

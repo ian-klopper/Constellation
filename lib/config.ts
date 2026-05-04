@@ -26,7 +26,7 @@ export type Config = {
   watchedTools: string[];
   daemon: { port: number };
   web: { port: number };
-  agentTtlSeconds: number;
+  staleAgentSeconds: number;
 };
 
 let cached: Config | null = null;
@@ -35,7 +35,23 @@ export function loadConfig(): Config {
   if (cached) return cached;
   ensureUserConfig();
   const raw = readFileSync(userConfigPath(), "utf8");
-  cached = JSON.parse(raw) as Config;
+  const parsed = JSON.parse(raw) as Partial<Config> & {
+    agentTtlSeconds?: number;
+  };
+  // Default-on-miss handles users who already have a pre-rename
+  // ~/.constellation/config.json with `agentTtlSeconds`. We do NOT
+  // honor that legacy value: it usually came from the bundled 1800s
+  // default, not a deliberate setting, and honoring it would suppress
+  // the very fix this rename ships.
+  if (typeof parsed.staleAgentSeconds !== "number") {
+    if (typeof parsed.agentTtlSeconds === "number") {
+      console.warn(
+        "[config] migrating to staleAgentSeconds=60 (legacy agentTtlSeconds ignored)",
+      );
+    }
+    parsed.staleAgentSeconds = 60;
+  }
+  cached = parsed as Config;
   return cached;
 }
 

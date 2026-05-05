@@ -4,7 +4,7 @@ See your codebase as a WinDirStat-style treemap with live Claude Code agents fly
 
 ## What it looks like
 
-<!-- TODO: add screenshot of the treemap with a couple of agents on it -->
+https://github.com/user-attachments/assets/86e75860-6e75-49d3-afad-163cbd16942f
 
 Every file is a rectangle sized by its line count, nested inside its directory. Hover any tile for a plain-English description, exported symbols, and import lists; click to pin the panel. When [Claude Code](https://docs.claude.com/en/docs/claude-code) is running in the same repo, foreground subagents render as emerald letter icons, background subagents as amber, and the main agent as a sky-blue dot — each shows a thought bubble with what it just did.
 

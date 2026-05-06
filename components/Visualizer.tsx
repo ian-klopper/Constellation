@@ -44,6 +44,7 @@ import {
 } from "./ZoomPanContext";
 import { ZOOM, POINTER_MOVE_THRESHOLD } from "@/lib/constants";
 import type { CodebaseTree, FileNode, TreeNode } from "@/lib/types";
+import { useFocusContext } from "./FocusContext";
 
 export function Visualizer({
   tree,
@@ -232,7 +233,7 @@ export function Visualizer({
       // their own pointer-handling owns those events (X close button, icon
       // click, text selection).
       const target = e.target instanceof Element ? e.target : null;
-      if (target?.closest("[data-hover-panel],[data-agent-overlay],[data-agent-rail]")) return;
+      if (target?.closest("[data-hover-panel],[data-agent-overlay],[data-agent-rail],[data-dir-label]")) return;
       state = "pressed";
       downX = e.clientX;
       downY = e.clientY;
@@ -352,6 +353,37 @@ export function Visualizer({
     };
   }, [scheduleFrame, setHover, setPinned]);
 
+  // Focus context — which directory (if any) is "zoomed in" as the tree root.
+  const { focusedNode, focusPath, registerResetZoom } = useFocusContext();
+
+  // Extracted zoom reset: mutates refs and wrapper transform synchronously so
+  // the View Transition "after" snapshot (taken immediately after flushSync
+  // returns) sees zoom=1. Do NOT rely on scheduleFrame here — the rAF tick
+  // fires after the snapshot, which would produce a visible pop.
+  const resetZoom = useCallback(() => {
+    liveRef.current = { zoom: 1, pan: { x: 0, y: 0 } };
+    committedZoomRef.current = 1;
+    if (wrapperRef.current) {
+      wrapperRef.current.style.transform = "translate(0px, 0px) scale(1)";
+    }
+    setCommittedZoom(1);
+  }, []);
+
+  // Register the imperative reset with the focus context so setFocusPath can
+  // call it inside its flushSync callback before the React state update.
+  useEffect(() => {
+    return registerResetZoom(resetZoom);
+  }, [registerResetZoom, resetZoom]);
+
+  // Clear the pin whenever the focus changes — a pinned file outside the new
+  // subtree would dangle. (The auto-clear on filesByPath doesn't catch this
+  // because filesByPath is always full-tree.)
+  useEffect(() => {
+    setPinned(null);
+    // focusPath is the only thing that should trigger this; setPinned is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusPath]);
+
   // 'f' = fit-to-viewport reset. Instant, no easing. Does NOT unpin —
   // Esc is the unpin shortcut, owned by PinController. Skips when the
   // user is typing in an editable element so 'f' in a search box isn't
@@ -372,18 +404,12 @@ export function Visualizer({
         }
       }
       e.preventDefault();
-      liveRef.current = { zoom: 1, pan: { x: 0, y: 0 } };
-      // Force-commit committedZoom in the same tick so any tiles that were
-      // culled at higher zoom render again on the next frame, instead of
-      // waiting for the next 5%-quantum crossing (which doesn't happen at
-      // zoom=1 with no further gesture).
-      committedZoomRef.current = 1;
-      setCommittedZoom(1);
+      resetZoom();
       scheduleFrame();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [scheduleFrame]);
+  }, [resetZoom, scheduleFrame]);
 
   const filesByPath = useMemo(() => {
     const map = new Map<string, FileNode>();
@@ -484,7 +510,7 @@ export function Visualizer({
               >
                 {size && size.w > 0 && size.h > 0 && (
                   <TreemapNode
-                    node={tree.tree}
+                    node={focusedNode ?? tree.tree}
                     x={0}
                     y={0}
                     w={size.w}

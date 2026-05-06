@@ -103,3 +103,14 @@ body {
     transition: none !important;
   }
 }
+
+/* View Transitions: the browser does NOT automatically skip the animation
+   under prefers-reduced-motion, so we must opt out explicitly. Without this
+   rule, focus changes still animate for users who have requested no motion. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

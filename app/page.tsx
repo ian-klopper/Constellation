@@ -30,6 +30,8 @@ import { fetchRepos, fetchAgents } from "@/lib/daemon-client";
 import { AgentDock } from "@/components/AgentDock";
 import { TileRegistryProvider } from "@/components/TileRegistry";
 import { TileActivityProvider } from "@/hooks/useTileActivity";
+import { FocusContextProvider } from "@/components/FocusContext";
+import { FocusBreadcrumb } from "@/components/FocusBreadcrumb";
 import { readRoadmap } from "@/lib/roadmap";
 import { listWorktrees } from "@/lib/worktrees";
 import type { RepoSummary } from "@/lib/types";
@@ -57,9 +59,13 @@ export default async function HomePage({
 
   return (
     <main className="flex h-screen flex-col">
+      <FocusContextProvider tree={tree.tree}>
       <TileRegistryProvider>
         <header className="flex items-center justify-between gap-4 border-b border-zinc-200 px-6 py-3 text-[11px] uppercase tracking-wider text-zinc-500">
-          <RepoSwitcher current={root} repos={repos} />
+          <div className="flex items-center gap-3 min-w-0">
+            <RepoSwitcher current={root} repos={repos} />
+            <FocusBreadcrumb rootName={path.basename(root)} />
+          </div>
           <div className="flex items-center gap-6">
             <DetailSlider />
             {roadmap && <RoadmapToggle data={roadmap} />}
@@ -77,6 +83,7 @@ export default async function HomePage({
           </div>
         </TileActivityProvider>
       </TileRegistryProvider>
+      </FocusContextProvider>
     </main>
   );
 }

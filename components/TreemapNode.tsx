@@ -17,6 +17,7 @@ import { useLod } from "./LodContext";
 import { useResolvedDescription } from "./LiveDescriptionsContext";
 import { useRegisterTile } from "./TileRegistry";
 import { useZoomPan } from "./ZoomPanContext";
+import { useFocusContext, vtName } from "./FocusContext";
 import type { TreeNode } from "@/lib/types";
 
 /**
@@ -69,6 +70,7 @@ function TreemapNodeImpl({ node, x, y, w, h, depth, tint }: Props) {
   // *not* swap to getLive().zoom: the whole point of the ref-driven
   // architecture is to keep continuous zoom values out of TreemapNode.
   const { committedZoom } = useZoomPan();
+  const { setFocusPath } = useFocusContext();
   // User-tunable LOD floor. Defaults to level 38 (≈ 8 px); the header
   // DetailSlider writes new values which reflow the gate live.
   const { minRender } = useLod();
@@ -157,11 +159,20 @@ function TreemapNodeImpl({ node, x, y, w, h, depth, tint }: Props) {
   if (tooSmall) return null;
 
   return (
-    <section style={style} className={sectionClass}>
+    <section
+      style={{ ...style, viewTransitionName: vtName(node.path) } as CSSProperties}
+      className={sectionClass}
+    >
       {!isRoot && (
-        <div className="pointer-events-none absolute left-1 top-0.5 truncate text-[10px] tracking-[0.15em] uppercase text-zinc-500">
+        <button
+          type="button"
+          data-dir-label
+          disabled={node.children.length === 0}
+          onClick={(e) => { e.stopPropagation(); setFocusPath(node.path); }}
+          className="block w-fit max-w-[calc(100%-0.5rem)] absolute left-1 top-0.5 truncate text-[10px] tracking-[0.15em] uppercase text-zinc-500 cursor-pointer hover:bg-zinc-100/40 transition-colors disabled:cursor-default disabled:hover:bg-transparent"
+        >
           {node.name}/
-        </div>
+        </button>
       )}
       {canRender &&
         node.children.map((child, idx) => {
@@ -275,6 +286,7 @@ function FileTile({
       data-path={node.path}
       style={{
         ...style,
+        viewTransitionName: vtName(node.path),
         ...(tileTouchShadow
           ? {
               "--tile-touch-shadow": tileTouchShadow,

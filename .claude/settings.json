@@ -18,15 +18,6 @@
             "command": ".claude/hooks/agent-touch.sh"
           }
         ]
-      },
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/learnings-surface.sh"
-          }
-        ]
       }
     ],
     "PostToolUse": [
@@ -36,15 +27,6 @@
           {
             "type": "command",
             "command": ".claude/hooks/agent-stop.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/description-refresh.sh"
           }
         ]
       }

@@ -25,15 +25,14 @@ One daemon watches every repo whose hooks point at its port. The home page accep
 
 `roadmap.json` at repo root, schema-enforced by `roadmap.schema.json` (`additionalProperties: false` everywhere — don't invent fields, update the schema in the same commit if you genuinely need a new shape). Move shipped items from `short_term` → `recently_shipped` with `shipped_at` + `commit`. Prune `recently_shipped` after ~2 weeks; git log remembers.
 
-## The compound loop
+## Descriptions & synthesis
 
-Each PR teaches the system; the system surfaces what it knows next time Claude edits in the same area. Two hooks + a path-keyed JSON sidecar:
+Per-edit injection hooks are gone — they were too noisy. Descriptions now refresh **manually**:
 
-- **Capture** — `description-refresh.sh` (PostToolUse on `Edit|Write|MultiEdit`) nudges the agent to (a) update `.constellation/descriptions.json` if the edit changed what the file is for, and (b) append a `{date, pr, insight}` to `.constellation/learnings.json` under the file path (or `_general`) if the edit revealed something non-obvious. Skip mechanical edits.
-- **Recall** — `learnings-surface.sh` (PreToolUse on the same matchers) injects matching learnings (file path + parent dir + most recent `_general`, capped 3 per bucket) as `additionalContext` *before* the edit.
-- **Synthesis** — the `synthesize-app` subagent (Opus + ultrathink, Read/Write only) reads only `descriptions.json` and writes a plain-English interpretation + flagged surprises to `.constellation/interpretation.md`. Diff over time = free architectural-drift detector.
+- **Manual refresh** — run `constellation describe` to (re)populate `.constellation/descriptions.json`. The CLI writes incrementally and the daemon's `DescriptionsBroker` fans every update out to open visualizer tabs over SSE, so live tiles update as the run progresses.
+- **Synthesis** — the `synthesize-app` subagent (Opus + ultrathink, Read/Write only) reads only `descriptions.json` and writes a plain-English interpretation + flagged surprises to `.constellation/interpretation.md`. Diff over time = free architectural-drift detector. **Keep this subagent** — it's the payoff for maintaining good descriptions.
 
-The heavy `compound-engineering` plugin is disabled in `.claude/settings.local.json` — this loop replaces its day-to-day function. `docs/brainstorms|plans|solutions/` are frozen institutional history; still read, not regenerated.
+The old `learnings.json` capture/recall loop and the `compound-engineering` plugin are both retired; `docs/brainstorms|plans|solutions/` are frozen institutional history, still read, not regenerated.
 
 ## Build & scripts
 

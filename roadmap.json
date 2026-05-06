@@ -13,6 +13,12 @@
   ],
   "recently_shipped": [
     {
+      "id": "remove-injection-hooks",
+      "title": "Remove per-edit injection hooks (learnings-surface, description-refresh) — too noisy",
+      "shipped_at": "2026-05-06",
+      "commit": null
+    },
+    {
       "id": "web-tier-launchd",
       "title": "Web tier runs under launchd alongside the daemon",
       "shipped_at": "2026-05-02",
